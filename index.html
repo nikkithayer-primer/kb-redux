@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knowledge Base Redux</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/table.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Knowledge Base Redux</h1>
+            <p class="subtitle">Upload CSV data to build your knowledge graph</p>
+        </header>
+
+        <section class="upload-section">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📄</div>
+                <div class="upload-text">Drop your CSV file here or click to browse</div>
+                <input type="file" id="fileInput" accept=".csv" />
+                <button class="btn" onclick="document.getElementById('fileInput').click()">Choose File</button>
+            </div>
+            
+            <div class="progress-bar hidden" id="progressBar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            
+            <div id="statusMessage"></div>
+            
+            <div id="processingControls" class="hidden">
+                <button class="btn" id="processBtn">Process Data</button>
+                <button class="btn btn-secondary" id="clearBtn">Clear</button>
+            </div>
+        </section>
+
+        <section class="knowledge-base-section">
+            <h2 class="section-title">Knowledge Base Statistics</h2>
+            <div class="stats-grid" id="statsGrid">
+                <div class="stat-card">
+                    <div class="stat-number" id="peopleCount">0</div>
+                    <div class="stat-label">People</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="organizationsCount">0</div>
+                    <div class="stat-label">Organizations</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="placesCount">0</div>
+                    <div class="stat-label">Places</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="eventsCount">0</div>
+                    <div class="stat-label">Events</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="knowledge-base-section">
+            <h2 class="section-title">Knowledge Base Entities</h2>
+            
+            <!-- Filter and Search Controls -->
+            <div class="table-controls">
+                <div class="filter-group">
+                    <label for="typeFilter">Filter by Type:</label>
+                    <select id="typeFilter" class="form-select">
+                        <option value="">All Types</option>
+                        <option value="person">People</option>
+                        <option value="organization">Organizations</option>
+                        <option value="place">Places</option>
+                    </select>
+                </div>
+                
+                <div class="search-group">
+                    <label for="entitySearch">Search:</label>
+                    <input type="text" id="entitySearch" class="form-input" placeholder="Search entities...">
+                </div>
+                
+            </div>
+            
+            <!-- Table View -->
+            <div class="table-container" id="tableContainer">
+                <table class="entities-table" id="entitiesTable">
+                    <thead>
+                        <tr>
+                            <th class="sortable" data-sort="name">Name <span class="sort-arrow">↕</span></th>
+                            <th class="sortable" data-sort="type">Type <span class="sort-arrow">↕</span></th>
+                            <th class="sortable" data-sort="description">Description <span class="sort-arrow">↕</span></th>
+                            <th class="sortable" data-sort="connections">Connections <span class="sort-arrow">↕</span></th>
+                            <th class="sortable" data-sort="wikidata">Wikidata <span class="sort-arrow">↕</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="entitiesTableBody">
+                        <!-- Table rows will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+            
+        </section>
+    </div>
+
+    <!-- External Libraries -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    
+    <!-- Application Scripts -->
+    <script type="module" src="app.js"></script>
+</body>
+</html>

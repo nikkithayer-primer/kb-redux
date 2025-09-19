@@ -1,0 +1,202 @@
+/* Table and Data Display Styles */
+
+/* Table Controls */
+.table-controls {
+    display: flex;
+    gap: var(--spacing-3xl);
+    align-items: center;
+    margin-bottom: var(--spacing-2xl);
+    padding: var(--spacing-xl);
+    background: var(--background-tertiary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-dark);
+    flex-wrap: wrap;
+}
+
+.filter-group,
+.search-group {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.filter-group label,
+.search-group label {
+    font-weight: var(--font-semibold);
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.form-select,
+.form-input {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--border-medium);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-md);
+    min-width: 150px;
+}
+
+.form-input:focus,
+.form-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: var(--shadow-focus);
+}
+
+/* Table Container */
+.table-container {
+    background: var(--background-secondary);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 1px solid var(--border-light);
+    box-shadow: var(--shadow-sm);
+}
+
+/* Table Styles */
+.entities-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-md);
+}
+
+.entities-table th {
+    background: var(--background-tertiary);
+    padding: var(--spacing-lg) var(--spacing-md);
+    text-align: left;
+    font-weight: var(--font-semibold);
+    color: var(--text-primary);
+    border-bottom: 2px solid var(--border-dark);
+    position: relative;
+}
+
+.entities-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: var(--transition-fast);
+}
+
+.entities-table th.sortable:hover {
+    background: var(--border-dark);
+}
+
+.sort-arrow {
+    margin-left: var(--spacing-sm);
+    opacity: 0.5;
+    font-size: var(--font-sm);
+}
+
+.entities-table th.sort-asc .sort-arrow {
+    opacity: 1;
+}
+
+.entities-table th.sort-desc .sort-arrow {
+    opacity: 1;
+    transform: rotate(180deg);
+}
+
+.entities-table td {
+    padding: var(--spacing-md);
+    border-bottom: 1px solid #f1f3f4;
+    vertical-align: top;
+}
+
+.entities-table tr:hover {
+    background: var(--background-hover);
+}
+
+/* Entity Name Cell */
+.entity-name-cell {
+    font-weight: var(--font-semibold);
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.entity-name-cell:hover {
+    color: var(--primary-color);
+    text-decoration: underline;
+}
+
+/* Entity Type Badge */
+.entity-type-badge {
+    display: inline-block;
+    background: var(--primary-color);
+    color: white;
+    padding: 3px var(--spacing-sm);
+    border-radius: var(--radius-xl);
+    font-size: var(--font-xs);
+    font-weight: var(--font-medium);
+    text-transform: capitalize;
+}
+
+.entity-type-badge.person {
+    background: var(--person-color);
+}
+
+.entity-type-badge.organization {
+    background: var(--organization-color);
+}
+
+.entity-type-badge.place {
+    background: var(--place-color);
+}
+
+/* Entity Description */
+.entity-description-cell {
+    max-width: 300px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.entity-description-cell.truncated {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Connections Count */
+.connections-count {
+    font-weight: var(--font-semibold);
+    color: var(--success-color);
+}
+
+/* Wikidata Link */
+.wikidata-link {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-size: var(--font-sm);
+}
+
+.wikidata-link:hover {
+    text-decoration: underline;
+}
+
+/* No Results */
+.no-results {
+    text-align: center;
+    padding: var(--spacing-4xl) var(--spacing-xl);
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .table-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--spacing-lg);
+    }
+
+    .entities-table {
+        font-size: var(--font-sm);
+    }
+
+    .entities-table th,
+    .entities-table td {
+        padding: var(--spacing-sm) var(--spacing-xs);
+    }
+
+    .entity-description-cell {
+        max-width: 200px;
+    }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "knowledge-base-redux",
+  "version": "1.0.0",
+  "description": "A minimalist web app for building knowledge graphs from CSV data with Firebase backend",
+  "main": "index.html",
+  "scripts": {
+    "dev": "python3 -m http.server 8000",
+    "serve": "python3 -m http.server 8000",
+    "start": "python3 -m http.server 8000"
+  },
+  "keywords": [
+    "knowledge-graph",
+    "csv-processing",
+    "firebase",
+    "wikidata",
+    "d3js",
+    "leaflet",
+    "data-visualization"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "firebase": "^10.12.2"
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "."
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
