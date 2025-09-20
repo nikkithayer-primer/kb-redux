@@ -6,42 +6,67 @@ export class WikidataService {
     }
 
     async searchWikidata(entityName) {
+        console.log('WikidataService: Searching for', entityName);
+        
         // Check cache first
         if (this.cache.has(entityName)) {
+            console.log('WikidataService: Found in cache');
             return this.cache.get(entityName);
         }
 
         try {
-            // Try multiple search variations for better matching
-            const searchVariations = this.generateSearchVariations(entityName);
+            // Single search query - no variations for speed
+            console.log('WikidataService: Searching for:', entityName);
+            const searchUrl = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(entityName)}&language=en&format=json&origin=*&limit=5`;
             
-            for (const searchQuery of searchVariations) {
-                const searchUrl = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(searchQuery)}&language=en&format=json&origin=*&limit=10`;
-                const response = await fetch(searchUrl);
+            // Add timeout to prevent hanging
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // Reduced to 5 second timeout
+            
+            try {
+                const response = await fetch(searchUrl, { signal: controller.signal });
+                clearTimeout(timeoutId);
                 const data = await response.json();
+                console.log('WikidataService: Search response received');
                 
                 if (data.search && data.search.length > 0) {
-                    // Try to find the best match by checking aliases
-                    const bestMatch = await this.findBestWikidataMatch(data.search, entityName);
+                    console.log('WikidataService: Found search results, using first match');
+                    // Use the first result directly for speed
+                    const firstMatch = data.search[0];
                     
-                    if (bestMatch) {
-                        // Get detailed entity data
-                        const detailUrl = `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${bestMatch.id}&format=json&origin=*`;
-                        const detailResponse = await fetch(detailUrl);
+                    console.log('WikidataService: Getting details for first match...');
+                    // Get detailed entity data
+                    const detailUrl = `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${firstMatch.id}&format=json&origin=*`;
+                    
+                    const detailController = new AbortController();
+                    const detailTimeoutId = setTimeout(() => detailController.abort(), 5000);
+                    
+                    try {
+                        const detailResponse = await fetch(detailUrl, { signal: detailController.signal });
+                        clearTimeout(detailTimeoutId);
                         const detailData = await detailResponse.json();
                         
-                        if (detailData.entities && detailData.entities[bestMatch.id]) {
-                            const result = await this.parseWikidataEntity(detailData.entities[bestMatch.id]);
+                        if (detailData.entities && detailData.entities[firstMatch.id]) {
+                            console.log('WikidataService: Parsing entity data...');
+                            const result = await this.parseWikidataEntity(detailData.entities[firstMatch.id]);
                             this.cache.set(entityName, result);
+                            console.log('WikidataService: Successfully processed', entityName);
                             return result;
                         }
+                    } catch (detailError) {
+                        clearTimeout(detailTimeoutId);
+                        console.warn('WikidataService: Detail fetch failed:', detailError);
                     }
                 }
+            } catch (searchError) {
+                clearTimeout(timeoutId);
+                console.warn('WikidataService: Search fetch failed:', searchError);
             }
         } catch (error) {
             console.warn('Wikidata search failed:', error);
         }
         
+        console.log('WikidataService: No results found for', entityName);
         this.cache.set(entityName, null);
         return null;
     }
@@ -61,10 +86,6 @@ export class WikidataService {
             }
         }
         
-        // Add version with "the" if it doesn't already have it
-        if (!lowerQuery.startsWith('the ')) {
-            variations.push(`the ${query}`);
-        }
         
         // Remove punctuation variations
         const noPunctuation = query.replace(/[.,!?;:'"()-]/g, '').trim();
@@ -77,67 +98,12 @@ export class WikidataService {
     }
 
     async findBestWikidataMatch(searchResults, originalQuery) {
-        const originalLower = originalQuery.toLowerCase().trim();
-        
-        // First, try exact matches on label or description
-        for (const result of searchResults) {
-            const labelLower = result.label?.toLowerCase() || '';
-            
-            if (labelLower === originalLower) {
-                return result;
-            }
+        // For speed, just return the first result
+        if (searchResults && searchResults.length > 0) {
+            console.log(`Using first search result for "${originalQuery}": ${searchResults[0].label} (${searchResults[0].id})`);
+            return searchResults[0];
         }
-        
-        // Then check aliases by fetching full entity data for top results
-        for (const result of searchResults.slice(0, 5)) { // Check top 5 results
-            try {
-                const entityResponse = await fetch(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${result.id}&format=json&origin=*&props=aliases|labels`);
-                const entityData = await entityResponse.json();
-                
-                if (entityData.entities && entityData.entities[result.id]) {
-                    const entity = entityData.entities[result.id];
-                    
-                    // Check aliases (Also known as)
-                    if (entity.aliases && entity.aliases.en) {
-                        for (const alias of entity.aliases.en) {
-                            if (alias.value.toLowerCase() === originalLower) {
-                                console.log(`Found exact alias match for "${originalQuery}": ${result.label} (${result.id})`);
-                                return result;
-                            }
-                        }
-                    }
-                    
-                    // Check for partial matches with common variations
-                    const searchVariations = this.generateSearchVariations(originalQuery);
-                    for (const variation of searchVariations) {
-                        const variationLower = variation.toLowerCase();
-                        
-                        // Check against label
-                        if (entity.labels?.en?.value?.toLowerCase() === variationLower) {
-                            console.log(`Found label match for "${originalQuery}" -> "${variation}": ${result.label} (${result.id})`);
-                            return result;
-                        }
-                        
-                        // Check against aliases
-                        if (entity.aliases && entity.aliases.en) {
-                            for (const alias of entity.aliases.en) {
-                                if (alias.value.toLowerCase() === variationLower) {
-                                    console.log(`Found alias match for "${originalQuery}" -> "${variation}": ${result.label} (${result.id})`);
-                                    return result;
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (error) {
-                console.warn(`Error checking aliases for ${result.id}:`, error);
-                continue;
-            }
-        }
-        
-        // If no exact match found, return the first result
-        console.log(`Using first search result for "${originalQuery}": ${searchResults[0].label} (${searchResults[0].id})`);
-        return searchResults[0];
+        return null;
     }
 
     async parseWikidataEntity(entity) {
@@ -200,10 +166,19 @@ export class WikidataService {
         try {
             const value = this.extractClaimValue(claim);
             if (value && typeof value === 'string' && value.match(/^Q\d+$/)) {
-                const response = await fetch(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${value}&format=json&origin=*&props=labels`);
-                const data = await response.json();
-                if (data.entities && data.entities[value] && data.entities[value].labels && data.entities[value].labels.en) {
-                    return data.entities[value].labels.en.value;
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+                
+                try {
+                    const response = await fetch(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${value}&format=json&origin=*&props=labels`, { signal: controller.signal });
+                    clearTimeout(timeoutId);
+                    const data = await response.json();
+                    if (data.entities && data.entities[value] && data.entities[value].labels && data.entities[value].labels.en) {
+                        return data.entities[value].labels.en.value;
+                    }
+                } catch (fetchError) {
+                    clearTimeout(timeoutId);
+                    console.warn('Error fetching Wikidata property:', fetchError);
                 }
             }
             return value;

@@ -2,22 +2,53 @@ import { db } from './config.js';
 import { collection, doc, getDocs, updateDoc, query, where } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 class EntityProfile {
-    constructor() {
-        this.entityId = new URLSearchParams(window.location.search).get('id');
-        this.entityType = new URLSearchParams(window.location.search).get('type');
+    constructor(entityId = null, entityType = null) {
+        this.entityId = entityId || new URLSearchParams(window.location.search).get('id');
+        this.entityType = entityType || new URLSearchParams(window.location.search).get('type');
         this.currentEntity = null;
         this.allEntities = [];
         this.allEvents = [];
         this.networkGraph = null;
         this.map = null;
         
+        // Only redirect if we're on the profile.html page
         if (!this.entityId || !this.entityType) {
-            window.location.href = 'index.html';
-            return;
+            if (window.location.pathname.includes('profile.html')) {
+                window.location.href = 'index.html';
+                return;
+            }
         }
         
         this.initializeEventListeners();
+        if (this.entityId && this.entityType) {
+            this.loadEntityData();
+        }
+    }
+
+    loadSpecificEntity(entityId, entityType) {
+        this.entityId = entityId;
+        this.entityType = entityType;
+        this.cleanup();
         this.loadEntityData();
+    }
+
+    cleanup() {
+        // Clean up map
+        if (this.map) {
+            this.map.remove();
+            this.map = null;
+        }
+        
+        // Clear containers
+        const mapContainer = document.getElementById('map');
+        if (mapContainer) {
+            mapContainer.innerHTML = '';
+        }
+        
+        const networkContainer = document.getElementById('networkGraph');
+        if (networkContainer) {
+            networkContainer.innerHTML = '';
+        }
     }
 
     initializeEventListeners() {
@@ -195,7 +226,9 @@ class EntityProfile {
         const relatedEvents = this.allEvents.filter(event => 
             event.actor.includes(this.currentEntity.name) || 
             event.target.includes(this.currentEntity.name) ||
-            event.locations.includes(this.currentEntity.name)
+            (Array.isArray(event.locations) 
+                ? event.locations.some(loc => (typeof loc === 'string' ? loc : loc.name) === this.currentEntity.name)
+                : event.locations && event.locations.includes(this.currentEntity.name))
         );
         
         if (relatedEvents.length === 0) {
@@ -217,7 +250,9 @@ class EntityProfile {
             // Parse entities from the event
             const actors = event.actor.split(',').map(a => a.trim());
             const targets = event.target.split(',').map(t => t.trim());
-            const locations = event.locations.split(',').map(l => l.trim());
+            const locations = Array.isArray(event.locations) 
+                ? event.locations.map(loc => typeof loc === 'string' ? loc : loc.name)
+                : (event.locations ? event.locations.split(',').map(l => l.trim()) : []);
             
             // Find other entities (not the current one)
             const otherEntities = [...actors, ...targets, ...locations].filter(name => 
@@ -281,7 +316,9 @@ class EntityProfile {
         const relatedEvents = this.allEvents.filter(event => 
             event.actor.includes(this.currentEntity.name) || 
             event.target.includes(this.currentEntity.name) ||
-            event.locations.includes(this.currentEntity.name)
+            (Array.isArray(event.locations) 
+                ? event.locations.some(loc => (typeof loc === 'string' ? loc : loc.name) === this.currentEntity.name)
+                : event.locations && event.locations.includes(this.currentEntity.name))
         );
         
         if (relatedEvents.length === 0) {
@@ -308,7 +345,9 @@ class EntityProfile {
                 <div class="event-sentence">${event.sentence}</div>
                 <div class="event-meta">
                     <span>${dateString}</span>
-                    <span class="event-location">${event.locations}</span>
+                    <span class="event-location">${Array.isArray(event.locations) 
+                        ? event.locations.map(loc => typeof loc === 'string' ? loc : loc.name).join(', ')
+                        : event.locations || ''}</span>
                 </div>
             `;
             
@@ -339,7 +378,9 @@ class EntityProfile {
         const relatedEvents = this.allEvents.filter(event => 
             event.actor.includes(this.currentEntity.name) || 
             event.target.includes(this.currentEntity.name) ||
-            event.locations.includes(this.currentEntity.name)
+            (Array.isArray(event.locations) 
+                ? event.locations.some(loc => (typeof loc === 'string' ? loc : loc.name) === this.currentEntity.name)
+                : event.locations && event.locations.includes(this.currentEntity.name))
         );
         
         console.log('Related events for network graph:', relatedEvents.length);
@@ -349,7 +390,9 @@ class EntityProfile {
         relatedEvents.forEach(event => {
             const actors = event.actor.split(',').map(a => a.trim());
             const targets = event.target.split(',').map(t => t.trim());
-            const locations = event.locations.split(',').map(l => l.trim());
+            const locations = Array.isArray(event.locations) 
+                ? event.locations.map(loc => typeof loc === 'string' ? loc : loc.name)
+                : (event.locations ? event.locations.split(',').map(l => l.trim()) : []);
             
             // Combine all entities from this event
             const allEventEntities = [...actors, ...targets, ...locations];
@@ -483,6 +526,17 @@ class EntityProfile {
     initializeMap() {
         const mapContainer = document.getElementById('map');
         
+        // Clean up existing map if it exists
+        if (this.map) {
+            this.map.remove();
+            this.map = null;
+        }
+        
+        // Clear the map container
+        if (mapContainer) {
+            mapContainer.innerHTML = '';
+        }
+        
         // Initialize Leaflet map
         this.map = L.map('map').setView([39.8283, -98.5795], 4); // Center on US
         
@@ -501,14 +555,18 @@ class EntityProfile {
         const relatedEvents = this.allEvents.filter(event => 
             event.actor.includes(this.currentEntity.name) || 
             event.target.includes(this.currentEntity.name) ||
-            event.locations.includes(this.currentEntity.name)
+            (Array.isArray(event.locations) 
+                ? event.locations.some(loc => (typeof loc === 'string' ? loc : loc.name) === this.currentEntity.name)
+                : event.locations && event.locations.includes(this.currentEntity.name))
         );
         
         // Extract unique locations from events
         const locationCounts = {};
         relatedEvents.forEach(event => {
             if (event.locations) {
-                const locations = event.locations.split(',').map(l => l.trim());
+                const locations = Array.isArray(event.locations) 
+                    ? event.locations.map(loc => typeof loc === 'string' ? loc : loc.name)
+                    : event.locations.split(',').map(l => l.trim());
                 locations.forEach(location => {
                     locationCounts[location] = (locationCounts[location] || 0) + 1;
                 });
@@ -1239,7 +1297,12 @@ class EntityProfile {
     }
 }
 
-// Initialize the profile page
-document.addEventListener('DOMContentLoaded', () => {
-    new EntityProfile();
-});
+// Initialize the profile page (only if on profile.html)
+if (window.location.pathname.includes('profile.html')) {
+    document.addEventListener('DOMContentLoaded', () => {
+        new EntityProfile();
+    });
+}
+
+// Export the class for use in other modules
+export { EntityProfile };

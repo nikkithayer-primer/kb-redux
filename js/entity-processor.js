@@ -18,9 +18,8 @@ export class EntityProcessor {
         let entity = this.findExistingEntity(entityName);
         
         if (!entity) {
-            // Check Firebase with search variations
-            const searchVariations = this.generateSearchVariations(entityName);
-            entity = await this.firebaseService.findEntityInFirebase(entityName, searchVariations);
+            // Check Firebase
+            entity = await this.firebaseService.findEntityInFirebase(entityName, [entityName]);
         }
         
         if (entity) {
@@ -54,17 +53,24 @@ export class EntityProcessor {
     }
 
     async processLocationEntity(locationName, event) {
+        console.log('EntityProcessor: Processing location entity', locationName);
         let entity = this.findExistingEntity(locationName);
         
         if (!entity) {
-            const searchVariations = this.generateSearchVariations(locationName);
-            entity = await this.firebaseService.findEntityInFirebase(locationName, searchVariations);
+            entity = await this.firebaseService.findEntityInFirebase(locationName, [locationName]);
         }
         
         if (entity) {
             this.ensureEntityInProcessedList(entity);
         } else {
-            const wikidataInfo = await this.wikidataService.searchWikidata(locationName);
+            let wikidataInfo = null;
+            
+            try {
+                wikidataInfo = await this.wikidataService.searchWikidata(locationName);
+                console.log('EntityProcessor: Wikidata search completed for location', locationName);
+            } catch (error) {
+                console.warn('EntityProcessor: Wikidata search failed for location', locationName, error);
+            }
             
             entity = {
                 id: `place_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -105,7 +111,15 @@ export class EntityProcessor {
     }
 
     async createNewEntity(entityName, role) {
-        const wikidataInfo = await this.wikidataService.searchWikidata(entityName);
+        console.log('EntityProcessor: Creating new entity for', entityName);
+        let wikidataInfo = null;
+        
+        try {
+            wikidataInfo = await this.wikidataService.searchWikidata(entityName);
+            console.log('EntityProcessor: Wikidata search completed for', entityName);
+        } catch (error) {
+            console.warn('EntityProcessor: Wikidata search failed for', entityName, error);
+        }
         
         const entity = {
             id: `entity_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -139,22 +153,15 @@ export class EntityProcessor {
             ...this.processedEntities.places
         ];
         
-        // Generate search variations for more flexible matching
-        const searchVariations = this.generateSearchVariations(name);
+        // Simple name matching for speed
+        const nameLower = name.toLowerCase();
+        const match = allEntities.find(entity => 
+            entity.name.toLowerCase() === nameLower ||
+            (entity.aliases && entity.aliases.some(alias => alias.toLowerCase() === nameLower))
+        );
         
-        for (const variation of searchVariations) {
-            const variationLower = variation.toLowerCase();
-            const match = allEntities.find(entity => 
-                entity.name.toLowerCase() === variationLower ||
-                (entity.aliases && entity.aliases.some(alias => alias.toLowerCase() === variationLower))
-            );
-            
-            if (match) {
-                if (variation !== name) {
-                    console.log(`Found existing entity match for "${name}" -> "${variation}": ${match.name}`);
-                }
-                return match;
-            }
+        if (match) {
+            return match;
         }
         
         return null;

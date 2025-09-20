@@ -149,8 +149,11 @@ export class TableManager {
         const description = entity.description || 'No description available';
         const truncatedDescription = description.length > 100 ? description.substring(0, 100) + '...' : description;
         
+        // Map entity type to collection name
+        const collectionName = this.getCollectionName(entityType);
+        
         row.innerHTML = `
-            <td class="entity-name-cell" onclick="window.location.href='profile.html?id=${entity.id}&type=${entityType}s'">${entity.name}</td>
+            <td class="entity-name-cell" onclick="window.app.showProfile('${entity.id}', '${collectionName}')">${entity.name}</td>
             <td><span class="entity-type-badge ${entityType}">${entityType}</span></td>
             <td class="entity-description-cell" title="${description}">${truncatedDescription}</td>
             <td class="connections-count">${connectionsCount}</td>
@@ -158,6 +161,20 @@ export class TableManager {
         `;
         
         return row;
+    }
+
+    getCollectionName(entityType) {
+        // Map entity types to their Firebase collection names
+        switch (entityType) {
+            case 'person':
+                return 'people';
+            case 'organization':
+                return 'organizations';
+            case 'place':
+                return 'places';
+            default:
+                return entityType + 's'; // fallback
+        }
     }
 
     clearTable() {

@@ -8,9 +8,10 @@
     <!-- Stylesheets -->
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/table.css">
+    <link rel="stylesheet" href="css/profile.css">
 </head>
 <body>
-    <div class="container">
+    <div class="container" id="mainView">
         <header>
             <h1>Knowledge Base Redux</h1>
             <p class="subtitle">Upload CSV data to build your knowledge graph</p>
@@ -99,6 +100,146 @@
             </div>
             
         </section>
+    </div>
+
+    <!-- Profile View (Hidden by default) -->
+    <div class="profile-container hidden" id="profileView">
+        <header class="profile-header-nav">
+            <button class="back-btn" id="backToMainBtn">← Back to Knowledge Base</button>
+            <div>
+                <button class="btn btn-secondary" id="editBtn">Edit Entity</button>
+                <button class="btn btn-warning" id="mergeBtn">Merge/Change Wikidata</button>
+            </div>
+        </header>
+
+        <div class="profile-header">
+            <div class="entity-info">
+                <div class="entity-details">
+                    <h1 id="entityName">Loading...</h1>
+                    <div class="entity-type" id="entityType">entity</div>
+                    <div class="entity-description" id="entityDescription">Loading entity information...</div>
+                    
+                    <div class="entity-meta" id="entityMeta">
+                        <!-- Meta information will be populated here -->
+                    </div>
+                </div>
+                
+                <div class="entity-actions">
+                    <button class="btn btn-secondary" id="exportBtn">Export Data</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-grid">
+            <div class="content-section">
+                <h2 class="section-title">Connection Network</h2>
+                <div id="networkGraph"></div>
+            </div>
+            
+            <div class="content-section">
+                <h2 class="section-title">Event Locations</h2>
+                <div id="map"></div>
+            </div>
+            
+            <div class="content-section">
+                <h2 class="section-title">Recent Connections</h2>
+                <div class="connections-list" id="connectionsList">
+                    <!-- Connections will be populated here -->
+                </div>
+            </div>
+            
+            <div class="content-section">
+                <h2 class="section-title">Related Events</h2>
+                <div class="events-list" id="eventsList">
+                    <!-- Events will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Merge Modal -->
+    <div class="modal" id="mergeModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Merge Entities</h3>
+                <button class="close-btn" id="closeMergeModal">&times;</button>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Search for entity to merge with:</label>
+                <input type="text" class="form-input" id="mergeSearch" placeholder="Search existing entities...">
+                <div class="search-results" id="mergeSearchResults"></div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Or change Wikidata ID:</label>
+                <input type="text" class="form-input" id="newWikidataId" placeholder="Q123456">
+                <button class="btn btn-secondary" id="fetchWikidataBtn">Fetch Wikidata Info</button>
+                <div id="wikidataPreview" class="wikidata-preview hidden">
+                    <!-- Preview will be populated here -->
+                </div>
+            </div>
+                        
+            <div class="form-actions">
+                <button class="btn btn-secondary" id="cancelMergeBtn">Cancel</button>
+                <button class="btn" id="confirmMergeBtn">Apply Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div class="modal" id="editModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Edit Entity</h3>
+                <button class="close-btn" id="closeEditModal">&times;</button>
+            </div>
+            
+            <form id="entityForm">
+                <div class="form-group">
+                    <label class="form-label" for="editName">Name</label>
+                    <input type="text" class="form-input" id="editName" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="editAliases">Aliases (comma-separated)</label>
+                    <input type="text" class="form-input" id="editAliases">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="editType">Type</label>
+                    <select class="form-select" id="editType">
+                        <option value="person">Person</option>
+                        <option value="organization">Organization</option>
+                        <option value="place">Place</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="editDescription">Description</label>
+                    <textarea class="form-textarea" id="editDescription"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="editWikidataId">Wikidata ID</label>
+                    <input type="text" class="form-input" id="editWikidataId" placeholder="Q123456">
+                    
+                    <div class="wikidata-search">
+                        <input type="text" class="form-input" id="wikidataSearch" placeholder="Search Wikidata...">
+                        <div class="search-results" id="searchResults"></div>
+                    </div>
+                </div>
+                
+                <div id="additionalFields">
+                    <!-- Additional fields based on entity type will be added here -->
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelEditBtn">Cancel</button>
+                    <button type="submit" class="btn">Save Changes</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <!-- External Libraries -->
