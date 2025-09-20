@@ -33,7 +33,8 @@
         </section>
 
         <section class="knowledge-base-section">
-            <h2 class="section-title">Statistics</h2>
+            <h2 class="section-title">Entities</h2>
+            
             <div class="stats-grid" id="statsGrid">
                 <div class="stat-card">
                     <div class="stat-number" id="peopleCount">0</div>
@@ -56,10 +57,6 @@
                     <div class="stat-label">Events</div>
                 </div>
             </div>
-        </section>
-
-        <section class="knowledge-base-section">
-            <h2 class="section-title">Entities</h2>
             
             <div class="table-controls">
                 <div class="filter-group">
@@ -74,7 +71,6 @@
                 </div>
                 
                 <div class="search-group">
-                    <label for="entitySearch">Search</label>
                     <input type="text" id="entitySearch" class="form-input" placeholder="Search...">
                 </div>
                 
@@ -117,18 +113,17 @@
             <div class="entity-info">
                 <div class="entity-details">
                     <div class="entity-header">
-                        <h1 id="entityName">Loading...</h1>
-                        <div class="entity-type" id="entityType">entity</div>
+                        <div class="entity-title-group">
+                            <h1 id="entityName">Loading...</h1>
+                            <div class="entity-type" id="entityType">entity</div>
+                        </div>
+                        <button class="btn btn-secondary" id="exportBtn">Export</button>
                     </div>
                     <div class="entity-description" id="entityDescription">Loading entity information...</div>
                     
                     <div class="entity-meta" id="entityMeta">
                         <!-- Meta information will be populated here -->
                     </div>
-                </div>
-                
-                <div class="entity-actions">
-                    <button class="btn btn-secondary" id="exportBtn">Export</button>
                 </div>
             </div>
         </div>
@@ -162,7 +157,15 @@
             
             <div class="content-section">
                 <h2 class="section-title">Connections</h2>
-                <div class="connections-list" id="connectionsList">
+                <div class="connections-filters">
+                    <div class="filter-pills">
+                        <button class="filter-pill active" data-filter="all">All</button>
+                        <button class="filter-pill" data-filter="actor">As Actor</button>
+                        <button class="filter-pill" data-filter="target">As Target</button>
+                        <button class="filter-pill" data-filter="location">As Location</button>
+                    </div>
+                </div>
+                <div class="connections-feed" id="connectionsList">
                     <!-- Connections will be populated here -->
                 </div>
             </div>

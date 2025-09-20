@@ -23,18 +23,17 @@
             <div class="entity-info">
                 <div class="entity-details">
                     <div class="entity-header">
-                        <h1 id="entityName">Loading...</h1>
-                        <div class="entity-type" id="entityType">entity</div>
+                        <div class="entity-title-group">
+                            <h1 id="entityName">Loading...</h1>
+                            <div class="entity-type" id="entityType">entity</div>
+                        </div>
+                        <button class="btn btn-secondary" id="exportBtn">Export Data</button>
                     </div>
                     <div class="entity-description" id="entityDescription">Loading entity information...</div>
                     
                     <div class="entity-meta" id="entityMeta">
                         <!-- Meta information will be populated here -->
                     </div>
-                </div>
-                
-                <div class="entity-actions">
-                    <button class="btn btn-secondary" id="exportBtn">Export Data</button>
                 </div>
             </div>
         </div>
@@ -52,8 +51,16 @@
             </div>
             
             <div class="content-section">
-                <h2 class="section-title">Recent Connections</h2>
-                <div class="connections-list" id="connectionsList">
+                <h2 class="section-title">Connections</h2>
+                <div class="connections-filters">
+                    <div class="filter-pills">
+                        <button class="filter-pill active" data-filter="all">All</button>
+                        <button class="filter-pill" data-filter="actor">As Actor</button>
+                        <button class="filter-pill" data-filter="target">As Target</button>
+                        <button class="filter-pill" data-filter="location">As Location</button>
+                    </div>
+                </div>
+                <div class="connections-feed" id="connectionsList">
                     <!-- Connections will be populated here -->
                 </div>
             </div>

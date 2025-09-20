@@ -136,9 +136,82 @@ export class WikidataService {
                 result.instance_of = await this.resolveWikidataProperty(entity.claims.P31[0]);
             }
 
-            // Occupation (P106) - for people
+            // Occupation (P106) - for people (handle all values)
             if (entity.claims.P106) {
-                result.occupation = await this.resolveWikidataProperty(entity.claims.P106[0]);
+                result.occupation = await this.resolveWikidataPropertyArray(entity.claims.P106);
+            }
+
+            // Aliases (P1449) - handle all values
+            if (entity.claims.P1449) {
+                result.aliases = await this.resolveWikidataPropertyArray(entity.claims.P1449);
+            }
+
+            // Languages spoken (P1412) - for people
+            if (entity.claims.P1412) {
+                result.languages_spoken = await this.resolveWikidataPropertyArray(entity.claims.P1412);
+            }
+
+            // Employer (P108) - for people
+            if (entity.claims.P108) {
+                result.employer = await this.resolveWikidataPropertyArray(entity.claims.P108);
+            }
+
+            // Educated at (P69) - for people
+            if (entity.claims.P69) {
+                result.educated_at = await this.resolveWikidataPropertyArray(entity.claims.P69);
+            }
+
+            // Residence (P551) - for people
+            if (entity.claims.P551) {
+                result.residences = await this.resolveWikidataPropertyArray(entity.claims.P551);
+            }
+
+            // Member of (P463) - for people/organizations
+            if (entity.claims.P463) {
+                result.member_of = await this.resolveWikidataPropertyArray(entity.claims.P463);
+            }
+
+            // Family relationships
+            const familyRelations = {};
+            
+            // Father (P22)
+            if (entity.claims.P22) {
+                familyRelations.father = await this.resolveWikidataPropertyArray(entity.claims.P22);
+            }
+            
+            // Mother (P25)
+            if (entity.claims.P25) {
+                familyRelations.mother = await this.resolveWikidataPropertyArray(entity.claims.P25);
+            }
+            
+            // Spouse (P26)
+            if (entity.claims.P26) {
+                familyRelations.spouse = await this.resolveWikidataPropertyArray(entity.claims.P26);
+            }
+            
+            // Child (P40)
+            if (entity.claims.P40) {
+                familyRelations.children = await this.resolveWikidataPropertyArray(entity.claims.P40);
+            }
+            
+            // Sibling (P3373)
+            if (entity.claims.P3373) {
+                familyRelations.siblings = await this.resolveWikidataPropertyArray(entity.claims.P3373);
+            }
+            
+            // Parent (P8810) - general parent property
+            if (entity.claims.P8810) {
+                familyRelations.parents = await this.resolveWikidataPropertyArray(entity.claims.P8810);
+            }
+            
+            // Relative (P1038) - general relative property
+            if (entity.claims.P1038) {
+                familyRelations.relatives = await this.resolveWikidataPropertyArray(entity.claims.P1038);
+            }
+
+            // Only add family_relations if there are any relationships
+            if (Object.keys(familyRelations).length > 0) {
+                result.family_relations = familyRelations;
             }
 
             // Country (P17) - for places
@@ -202,6 +275,23 @@ export class WikidataService {
         } catch (error) {
             console.warn('Error resolving Wikidata property:', error);
             return this.extractClaimValue(claim);
+        }
+    }
+
+    async resolveWikidataPropertyArray(claims) {
+        try {
+            // Limit to first 10 items to avoid excessive API calls
+            const limitedClaims = claims.slice(0, 10);
+            const results = await Promise.all(
+                limitedClaims.map(claim => this.resolveWikidataProperty(claim))
+            );
+            
+            // Filter out null/undefined values and return unique values
+            const validResults = results.filter(result => result != null && result !== '');
+            return [...new Set(validResults)];
+        } catch (error) {
+            console.warn('Error resolving Wikidata property array:', error);
+            return [];
         }
     }
 

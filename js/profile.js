@@ -109,8 +109,9 @@ class EntityProfile {
             
             // Only show network graph and map for known entity types
             if (this.currentEntity.type !== 'unknown') {
-            this.initializeNetworkGraph();
-            this.initializeMap();
+                this.showNetworkGraphAndMap();
+                this.initializeNetworkGraph();
+                this.initializeMap();
             } else {
                 this.hideNetworkGraphAndMap();
             }
@@ -177,21 +178,44 @@ class EntityProfile {
     }
 
     getMetaFields(entity) {
+        const formatArray = (arr) => Array.isArray(arr) ? arr.join(', ') : arr;
+        
         const commonFields = [
             { label: 'Wikidata ID', value: entity.wikidata_id },
-            { label: 'Aliases', value: entity.aliases ? entity.aliases.join(', ') : null }
+            { label: 'Aliases', value: formatArray(entity.aliases) }
         ];
         
         if (entity.type === 'person') {
-            return [
+            const personFields = [
                 ...commonFields,
-                { label: 'Occupation', value: entity.occupation },
+                { label: 'Occupation', value: formatArray(entity.occupation) },
                 { label: 'Job Title', value: entity.jobTitle },
                 { label: 'Current Employer', value: entity.currentEmployer },
+                { label: 'Employer', value: formatArray(entity.employer) },
                 { label: 'Education', value: entity.educatedAt ? entity.educatedAt.join(', ') : null },
+                { label: 'Educated At', value: formatArray(entity.educated_at) },
                 { label: 'Current Residence', value: entity.currentResidence },
+                { label: 'Residences', value: formatArray(entity.residences) },
+                { label: 'Languages Spoken', value: formatArray(entity.languages_spoken) },
+                { label: 'Member Of', value: formatArray(entity.member_of) },
                 { label: 'Date of Birth', value: entity.dateOfBirth }
             ];
+            
+            // Add family relationships if they exist
+            if (entity.family_relations) {
+                const familyFields = [];
+                if (entity.family_relations.father) familyFields.push({ label: 'Father', value: formatArray(entity.family_relations.father) });
+                if (entity.family_relations.mother) familyFields.push({ label: 'Mother', value: formatArray(entity.family_relations.mother) });
+                if (entity.family_relations.spouse) familyFields.push({ label: 'Spouse', value: formatArray(entity.family_relations.spouse) });
+                if (entity.family_relations.children) familyFields.push({ label: 'Children', value: formatArray(entity.family_relations.children) });
+                if (entity.family_relations.siblings) familyFields.push({ label: 'Siblings', value: formatArray(entity.family_relations.siblings) });
+                if (entity.family_relations.parents) familyFields.push({ label: 'Parents', value: formatArray(entity.family_relations.parents) });
+                if (entity.family_relations.relatives) familyFields.push({ label: 'Relatives', value: formatArray(entity.family_relations.relatives) });
+                
+                return [...personFields, ...familyFields];
+            }
+            
+            return personFields;
         } else if (entity.type === 'organization') {
             return [
                 ...commonFields,
@@ -199,7 +223,8 @@ class EntityProfile {
                 { label: 'Industry', value: entity.industry },
                 { label: 'Founded', value: entity.founded },
                 { label: 'Location', value: entity.location },
-                { label: 'Employees', value: entity.employees }
+                { label: 'Employees', value: entity.employees },
+                { label: 'Member Of', value: formatArray(entity.member_of) }
             ];
         } else if (entity.type === 'place') {
             return [
@@ -261,7 +286,7 @@ class EntityProfile {
         if (entity.category) fields.push({ label: 'Category', value: entity.category });
         
         // Person-specific fields
-        if (entity.occupation) fields.push({ label: 'Occupation', value: entity.occupation });
+        if (entity.occupation) fields.push({ label: 'Occupation', value: formatValue(entity.occupation) });
         if (entity.jobTitle) fields.push({ label: 'Job Title', value: entity.jobTitle });
         if (entity.currentEmployer) fields.push({ label: 'Current Employer', value: entity.currentEmployer });
         if (entity.previousEmployers) fields.push({ label: 'Previous Employers', value: formatValue(entity.previousEmployers) });
@@ -272,6 +297,24 @@ class EntityProfile {
         if (entity.dateOfBirth) fields.push({ label: 'Date of Birth', value: entity.dateOfBirth });
         if (entity.gender) fields.push({ label: 'Gender', value: entity.gender });
         if (entity.expertise) fields.push({ label: 'Expertise', value: formatValue(entity.expertise) });
+        
+        // Enhanced Wikidata fields
+        if (entity.employer) fields.push({ label: 'Employer', value: formatValue(entity.employer) });
+        if (entity.educated_at) fields.push({ label: 'Educated At (Wikidata)', value: formatValue(entity.educated_at) });
+        if (entity.residences) fields.push({ label: 'Residences', value: formatValue(entity.residences) });
+        if (entity.languages_spoken) fields.push({ label: 'Languages Spoken', value: formatValue(entity.languages_spoken) });
+        if (entity.member_of) fields.push({ label: 'Member Of', value: formatValue(entity.member_of) });
+        
+        // Family relationships
+        if (entity.family_relations) {
+            if (entity.family_relations.father) fields.push({ label: 'Father', value: formatValue(entity.family_relations.father) });
+            if (entity.family_relations.mother) fields.push({ label: 'Mother', value: formatValue(entity.family_relations.mother) });
+            if (entity.family_relations.spouse) fields.push({ label: 'Spouse', value: formatValue(entity.family_relations.spouse) });
+            if (entity.family_relations.children) fields.push({ label: 'Children', value: formatValue(entity.family_relations.children) });
+            if (entity.family_relations.siblings) fields.push({ label: 'Siblings', value: formatValue(entity.family_relations.siblings) });
+            if (entity.family_relations.parents) fields.push({ label: 'Parents', value: formatValue(entity.family_relations.parents) });
+            if (entity.family_relations.relatives) fields.push({ label: 'Relatives', value: formatValue(entity.family_relations.relatives) });
+        }
         
         // Organization-specific fields
         if (entity.industry) fields.push({ label: 'Industry', value: entity.industry });
@@ -304,7 +347,9 @@ class EntityProfile {
                 'organization', 'educatedAt', 'currentResidence', 'previousResidences',
                 'dateOfBirth', 'gender', 'expertise', 'industry', 'founded', 'employees',
                 'location', 'country', 'state', 'population', 'coordinates', 'connections',
-                'created', 'updated', 'lastModified'
+                'created', 'updated', 'lastModified',
+                // New Wikidata fields
+                'employer', 'educated_at', 'residences', 'languages_spoken', 'member_of', 'family_relations'
             ];
             
             if (!skipFields.includes(key) && entity[key] !== null && entity[key] !== undefined && entity[key] !== '') {
@@ -321,9 +366,31 @@ class EntityProfile {
     }
 
     renderConnections() {
-        const connectionsList = document.getElementById('connectionsList');
-        connectionsList.innerHTML = '';
+        // Initialize filter event listeners
+        this.initializeConnectionFilters();
         
+        // Store all connections for filtering
+        this.allConnections = this.processConnectionsData();
+        
+        // Render with default filter (all)
+        this.renderFilteredConnections('all');
+    }
+
+    initializeConnectionFilters() {
+        const filterPills = document.querySelectorAll('.filter-pill');
+        filterPills.forEach(pill => {
+            pill.addEventListener('click', (e) => {
+                // Remove active class from all pills
+                filterPills.forEach(p => p.classList.remove('active'));
+                // Add active class to clicked pill
+                e.target.classList.add('active');
+                // Filter connections
+                this.renderFilteredConnections(e.target.dataset.filter);
+            });
+        });
+    }
+
+    processConnectionsData() {
         // Find events where this entity is involved
         const relatedEvents = this.allEvents.filter(event => 
             event.actor.includes(this.currentEntity.name) || 
@@ -332,80 +399,121 @@ class EntityProfile {
                 ? event.locations.some(loc => (typeof loc === 'string' ? loc : loc.name) === this.currentEntity.name)
                 : event.locations && event.locations.includes(this.currentEntity.name))
         );
-        
-        if (relatedEvents.length === 0) {
-            connectionsList.innerHTML = '<p style="color: #7f8c8d; text-align: center; padding: 20px;">No connections found</p>';
-            return;
-        }
-        
-        // Sort events by date (most recent first)
-        const sortedEvents = relatedEvents.sort((a, b) => {
-            const dateA = this.parseEventDate(a.dateReceived);
-            const dateB = this.parseEventDate(b.dateReceived);
-            return dateB - dateA;
-        });
-        
-        sortedEvents.slice(0, 10).forEach(event => {
-            const connectionItem = document.createElement('div');
-            connectionItem.className = 'connection-item';
-            
-            // Parse entities from the event
+
+        // Process each event into connection data
+        const connections = relatedEvents.map(event => {
             const actors = event.actor.split(',').map(a => a.trim());
             const targets = event.target ? event.target.split(',').map(t => t.trim()).filter(t => t.length > 0) : [];
             const locations = Array.isArray(event.locations) 
                 ? event.locations.map(loc => typeof loc === 'string' ? loc : loc.name)
                 : (event.locations ? event.locations.split(',').map(l => l.trim()) : []);
-            
-            // Find other entities (not the current one)
-            const otherEntities = [...actors, ...targets, ...locations].filter(name => 
-                name.toLowerCase() !== this.currentEntity.name.toLowerCase()
-            );
-            
-            // Determine relationship type
-            let relationshipType = 'Connected to:';
-            let relatedEntityNames = otherEntities;
-            
+
+            // Determine this entity's role in the event
+            let role = 'connected';
+            let primaryEntity = '';
+            let otherEntities = [];
+
             if (actors.includes(this.currentEntity.name)) {
-                relationshipType = `${event.action}`;
-                relatedEntityNames = [...targets, ...locations];
+                role = 'actor';
+                primaryEntity = targets.length > 0 ? targets[0] : (locations.length > 0 ? locations[0] : '');
+                otherEntities = [...targets.slice(1), ...locations];
             } else if (targets.includes(this.currentEntity.name)) {
-                relationshipType = 'target of';
-                relatedEntityNames = [...actors, ...locations];
-            } else if (locations.includes(this.currentEntity.name)) {
-                relationshipType = 'location of';
-                relatedEntityNames = [...actors, ...targets];
+                role = 'target';
+                primaryEntity = actors.length > 0 ? actors[0] : '';
+                otherEntities = [...actors.slice(1), ...locations];
+            } else if (locations.some(loc => loc === this.currentEntity.name)) {
+                role = 'location';
+                primaryEntity = actors.length > 0 ? actors[0] : (targets.length > 0 ? targets[0] : '');
+                otherEntities = [...actors.slice(1), ...targets];
             }
+
+            return {
+                event,
+                role,
+                primaryEntity,
+                otherEntities: otherEntities.filter(e => e && e.length > 0),
+                date: this.parseEventDate(event.dateReceived)
+            };
+        });
+
+        // Sort by date (most recent first)
+        return connections.sort((a, b) => {
+            if (!a.date && !b.date) return 0;
+            if (!a.date) return 1;
+            if (!b.date) return -1;
+            return b.date - a.date;
+        });
+    }
+
+    renderFilteredConnections(filter) {
+        const connectionsList = document.getElementById('connectionsList');
+        connectionsList.innerHTML = '';
+
+        // Filter connections based on selected filter
+        let filteredConnections = this.allConnections;
+        if (filter !== 'all') {
+            filteredConnections = this.allConnections.filter(conn => conn.role === filter);
+        }
+
+        if (filteredConnections.length === 0) {
+            connectionsList.innerHTML = '<div class="connections-empty">No connections found for this filter</div>';
+            return;
+        }
+
+        // Render up to 20 connections
+        filteredConnections.slice(0, 20).forEach(connection => {
+            const connectionItem = document.createElement('div');
+            connectionItem.className = 'connection-item';
             
-            const displayNames = relatedEntityNames.slice(0, 3).join(', ') || 'Event';
-            
-            // Find a clickable entity
+            // Find clickable entity
             let clickableEntity = null;
-            for (const name of relatedEntityNames) {
-                clickableEntity = this.findEntityByName(name);
-                if (clickableEntity) break;
+            if (connection.primaryEntity) {
+                clickableEntity = this.findEntityByName(connection.primaryEntity);
             }
+
+            // Format date
+            const dateString = connection.date ? this.formatTimelineDate(connection.date) : 'Unknown date';
             
-            // Format the date
-            const eventDate = this.parseEventDate(event.dateReceived);
-            const dateString = eventDate ? eventDate.toLocaleDateString() : 'Unknown date';
-            
+            // Create other entities list
+            const otherEntitiesText = connection.otherEntities.length > 0 
+                ? `Also involved: ${connection.otherEntities.slice(0, 3).join(', ')}${connection.otherEntities.length > 3 ? '...' : ''}`
+                : '';
+
             connectionItem.innerHTML = `
-                <div class="connection-type">${relationshipType} ${displayNames}</div>
-                <div class="connection-details">
-                    Action: ${event.action}<br>
-                    Date: ${dateString}
+                <div class="connection-header">
+                    <div class="connection-entities">
+                        <div class="connection-primary-entity">${connection.primaryEntity || 'Unknown Entity'}</div>
+                    </div>
+                    <div class="connection-meta">
+                        <span class="connection-role ${connection.role}">${connection.role}</span>
+                        <span class="connection-date">${dateString}</span>
+                    </div>
                 </div>
+                <div class="connection-sentence">${connection.event.sentence || 'No description available'}</div>
+                ${otherEntitiesText ? `<div class="connection-other-entities">${otherEntitiesText}</div>` : ''}
             `;
-            
+
+            // Add click handler to primary entity name only
             if (clickableEntity) {
-                connectionItem.onclick = () => {
-                    const typeParam = clickableEntity.type === 'person' ? 'people' : 
-                                     clickableEntity.type === 'organization' ? 'organizations' : 'places';
-                    window.location.href = `profile.html?id=${clickableEntity.id}&type=${typeParam}`;
-                };
-                connectionItem.style.cursor = 'pointer';
+                const primaryEntityElement = connectionItem.querySelector('.connection-primary-entity');
+                if (primaryEntityElement) {
+                    primaryEntityElement.addEventListener('click', () => {
+                        const typeParam = clickableEntity.type === 'person' ? 'people' : 
+                                         clickableEntity.type === 'organization' ? 'organizations' : 
+                                         clickableEntity.type === 'place' ? 'places' : 'unknown';
+                        
+                        if (window.location.pathname.includes('profile.html')) {
+                            window.location.href = `profile.html?id=${clickableEntity.id}&type=${typeParam}`;
+                        } else {
+                            // We're in the main app, use the showProfile method
+                            if (window.app && window.app.showProfile) {
+                                window.app.showProfile(clickableEntity.id, typeParam);
+                            }
+                        }
+                    });
+                }
             }
-            
+
             connectionsList.appendChild(connectionItem);
         });
     }
@@ -809,34 +917,30 @@ class EntityProfile {
     }
 
     hideNetworkGraphAndMap() {
-        // Hide network graph section
+        // Hide network graph section completely
         const networkSection = document.querySelector('.content-section:has(#networkGraph)');
         if (networkSection) {
             networkSection.style.display = 'none';
         }
         
-        // Hide map section
+        // Hide map section completely
         const mapSection = document.querySelector('.content-section:has(#map)');
         if (mapSection) {
             mapSection.style.display = 'none';
         }
+    }
+
+    showNetworkGraphAndMap() {
+        // Show network graph section
+        const networkSection = document.querySelector('.content-section:has(#networkGraph)');
+        if (networkSection) {
+            networkSection.style.display = 'block';
+        }
         
-        // Show a message for unknown entities
-        const connectionsSection = document.querySelector('.content-section:has(#connectionsList)');
-        if (connectionsSection) {
-            const existingMessage = connectionsSection.querySelector('.unknown-entity-message');
-            if (!existingMessage) {
-                const message = document.createElement('div');
-                message.className = 'unknown-entity-message';
-                message.innerHTML = `
-                    <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; margin: 10px 0; text-align: center;">
-                        <h4 style="color: #6c757d; margin-bottom: 10px;">Unknown Entity</h4>
-                        <p style="color: #6c757d; margin: 0;">This entity type is not fully classified. Network graph and map are not available.</p>
-                        <p style="color: #6c757d; margin: 5px 0 0 0; font-size: 14px;">You can edit this entity to change its type if more information becomes available.</p>
-                    </div>
-                `;
-                connectionsSection.insertBefore(message, connectionsSection.firstChild.nextSibling);
-            }
+        // Show map section
+        const mapSection = document.querySelector('.content-section:has(#map)');
+        if (mapSection) {
+            mapSection.style.display = 'block';
         }
     }
 
@@ -875,7 +979,7 @@ class EntityProfile {
         this.addEventMarkers();
     }
 
-    addEventMarkers() {
+    async addEventMarkers() {
         if (!this.map) return;
         
         // Find events related to this entity
@@ -900,8 +1004,9 @@ class EntityProfile {
             }
         });
         
-        // Add markers for each location
-        Object.entries(locationCounts).forEach(async ([locationName, count]) => {
+        // Collect all markers and their coordinates for auto-zoom
+        const markers = [];
+        const markerPromises = Object.entries(locationCounts).map(async ([locationName, count]) => {
             const coordinates = await this.getLocationCoordinates(locationName);
             if (coordinates) {
                 const marker = L.marker([coordinates.lat, coordinates.lng])
@@ -910,8 +1015,23 @@ class EntityProfile {
                         <strong>${locationName}</strong><br>
                         ${count} event${count > 1 ? 's' : ''}
                     `);
+                markers.push(marker);
+                return marker;
             }
+            return null;
         });
+        
+        // Wait for all markers to be added, then auto-zoom to fit them
+        await Promise.all(markerPromises);
+        
+        if (markers.length > 0) {
+            // Create a group of all markers and fit the map to show them all
+            const group = new L.featureGroup(markers);
+            this.map.fitBounds(group.getBounds(), {
+                padding: [20, 20], // Add some padding around the markers
+                maxZoom: 10 // Don't zoom in too much for single locations
+            });
+        }
     }
 
     async getLocationCoordinates(locationName) {
@@ -1177,6 +1297,7 @@ class EntityProfile {
             if (typeChanged) {
                 // Re-initialize network graph and map based on new type
                 if (updatedEntity.type !== 'unknown') {
+                    this.showNetworkGraphAndMap();
                     this.initializeNetworkGraph();
                     this.initializeMap();
                 } else {
