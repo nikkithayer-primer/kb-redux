@@ -23,13 +23,41 @@ export class TableManager {
     }
 
     updateAllEntities(processedEntities) {
+        // Calculate actual connection counts from events
+        const events = processedEntities.events || [];
+        
         this.allEntities = [
             ...processedEntities.people.map(e => ({...e, category: 'person'})),
             ...processedEntities.organizations.map(e => ({...e, category: 'organization'})),
             ...processedEntities.places.map(e => ({...e, category: 'place'}))
-        ];
+        ].map(entity => {
+            // Calculate real connection count from events
+            const connectionCount = this.calculateConnectionCount(entity, events);
+            return {
+                ...entity,
+                actualConnectionCount: connectionCount
+            };
+        });
         
         this.filterEntities();
+    }
+
+    calculateConnectionCount(entity, events) {
+        // Count events where this entity appears as actor, target, or location
+        return events.filter(event => {
+            const actors = event.actor ? event.actor.split(',').map(a => a.trim()) : [];
+            const targets = event.target ? event.target.split(',').map(t => t.trim()) : [];
+            const locations = Array.isArray(event.locations) 
+                ? event.locations.map(loc => typeof loc === 'string' ? loc : loc.name)
+                : (event.locations ? event.locations.split(',').map(l => l.trim()) : []);
+            
+            return actors.includes(entity.name) || 
+                   targets.includes(entity.name) || 
+                   locations.includes(entity.name) ||
+                   (entity.aliases && entity.aliases.some(alias => 
+                       actors.includes(alias) || targets.includes(alias) || locations.includes(alias)
+                   ));
+        }).length;
     }
 
     filterEntities() {
@@ -91,8 +119,8 @@ export class TableManager {
                     bValue = (b.description || '').toLowerCase();
                     break;
                 case 'connections':
-                    aValue = a.connections ? a.connections.length : 0;
-                    bValue = b.connections ? b.connections.length : 0;
+                    aValue = a.actualConnectionCount || 0;
+                    bValue = b.actualConnectionCount || 0;
                     break;
                 case 'wikidata':
                     aValue = a.wikidata_id || '';
@@ -144,7 +172,8 @@ export class TableManager {
     createTableRow(entity) {
         const row = document.createElement('tr');
         
-        const connectionsCount = entity.connections ? entity.connections.length : 0;
+        // Use the calculated connection count from events, not the stored connections array
+        const connectionsCount = entity.actualConnectionCount || 0;
         const entityType = entity.category || entity.type;
         const description = entity.description || 'No description available';
         const truncatedDescription = description.length > 100 ? description.substring(0, 100) + '...' : description;
