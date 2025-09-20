@@ -7,6 +7,7 @@ import { DateTimeProcessor } from './datetime-processor.js';
 import { EntityProcessor } from './entity-processor.js';
 import { TableManager } from './table-manager.js';
 import { EntityProfile } from './profile.js';
+import { DeduplicationService } from './deduplication-service.js';
 
 export class KnowledgeBaseApp {
     constructor() {
@@ -17,6 +18,7 @@ export class KnowledgeBaseApp {
         this.dateTimeProcessor = new DateTimeProcessor();
         this.entityProcessor = new EntityProcessor(this.wikidataService, this.firebaseService, this.dateTimeProcessor);
         this.tableManager = new TableManager();
+        this.deduplicationService = new DeduplicationService();
         
         // Initialize UI
         this.initializeEventListeners();
@@ -27,6 +29,9 @@ export class KnowledgeBaseApp {
         // File upload
         const fileInput = document.getElementById('fileInput');
         fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
+        
+        // Deduplication button
+        document.getElementById('deduplicationBtn').addEventListener('click', () => this.runDeduplication());
         
         // Table manager events
         this.tableManager.initializeEventListeners();
@@ -50,7 +55,6 @@ export class KnowledgeBaseApp {
             this.showStatus('Reading CSV file...', 'info');
             const rows = await this.csvParser.parseFile(file);
             this.showStatus(`Loaded ${rows.length} rows from CSV`, 'success');
-            console.log('Parsed CSV data:', rows);
             
             
             // Automatically start processing the data
@@ -68,19 +72,15 @@ export class KnowledgeBaseApp {
         }
 
         try {
-            console.log('Starting processData with', this.csvParser.rawData.length, 'rows');
             this.showStatus('Processing data...', 'info');
             let processedRows = 0;
             let skippedDuplicates = 0;
             const totalRows = this.csvParser.rawData.length;
 
-            console.log('About to start processing rows...');
             for (const row of this.csvParser.rawData) {
-                console.log(`Processing row ${processedRows + 1}:`, row);
                 try {
                     await this.processRow(row);
                     processedRows++;
-                    console.log(`Successfully processed row ${processedRows}`);
                 } catch (rowError) {
                     console.error(`Error processing row ${processedRows + 1}:`, rowError);
                     processedRows++; // Still increment to avoid infinite loop
@@ -90,8 +90,6 @@ export class KnowledgeBaseApp {
                     this.showStatus(`Processing... ${processedRows}/${totalRows} rows`, 'info');
                 }
             }
-
-            console.log('Finished processing rows, starting Firebase save...');
             this.showStatus('Saving to Firebase...', 'info');
             await this.saveToFirebase();
             
@@ -104,14 +102,11 @@ export class KnowledgeBaseApp {
     }
 
     async processRow(row) {
-        console.log('processRow: Starting row processing');
-        
-        // Validate required fields
-        if (!row.Actor || !row.Action || !row.Target || !row['Date Received']) {
+        // Validate required fields - Target is optional
+        if (!row.Actor || !row.Action || !row['Date Received']) {
             console.warn('Skipping row with missing required fields:', row);
             return;
         }
-        console.log('processRow: Validation passed');
 
         // Parse and validate date received
         const dateReceived = new Date(row['Date Received']);
@@ -119,115 +114,88 @@ export class KnowledgeBaseApp {
             console.warn('Skipping row with invalid Date Received:', row['Date Received']);
             return;
         }
-        console.log('processRow: Date parsing passed');
 
         // Process datetime
-        console.log('processRow: Processing datetime...');
         const processedDatetime = this.dateTimeProcessor.processDateTime(row.Datetimes, dateReceived);
-        console.log('processRow: Datetime processed');
 
         // Create event object
         const event = {
             id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             actor: row.Actor,
             action: row.Action,
-            target: row.Target,
+            target: row.Target || '', // Target is optional, default to empty string
             sentence: row.Sentence,
             dateReceived: dateReceived,
             processedDatetime: processedDatetime,
             locations: row.Locations ? this.csvParser.parseLocations(row.Locations) : []
         };
-        console.log('processRow: Event object created:', event);
 
         // Check for duplicate events
-        console.log('processRow: Checking for duplicates...');
         try {
             const duplicateEvent = await this.firebaseService.findDuplicateEvent(event);
             if (duplicateEvent) {
-                console.log('Skipping duplicate event:', event.sentence);
-                return;
+                return; // Skip duplicate
             }
-            console.log('processRow: No duplicates found');
         } catch (duplicateError) {
-            console.error('processRow: Error checking duplicates:', duplicateError);
+            console.error('Error checking duplicates:', duplicateError);
         }
 
         // Add to processed events
         this.entityProcessor.processedEntities.events.push(event);
-        console.log('processRow: Event added to processed list');
+
+        // Process all entities in parallel for better performance
+        const entityPromises = [];
 
         // Process actors
-        console.log('processRow: Processing actors...');
         const actors = this.csvParser.parseEntities(row.Actor);
-        for (const actor of actors) {
-            console.log('processRow: Processing actor:', actor);
-            try {
-                await this.entityProcessor.processEntity(actor, 'actor', event);
-                console.log('processRow: Actor processed successfully');
-            } catch (actorError) {
-                console.error('processRow: Error processing actor:', actorError);
-            }
-        }
+        actors.forEach(actor => {
+            entityPromises.push(
+                this.entityProcessor.processEntity(actor, 'actor', event)
+                    .catch(error => console.error('Error processing actor:', error))
+            );
+        });
 
-        // Process targets
-        console.log('processRow: Processing targets...');
-        const targets = this.csvParser.parseEntities(row.Target);
-        for (const target of targets) {
-            console.log('processRow: Processing target:', target);
-            try {
-                await this.entityProcessor.processEntity(target, 'target', event);
-                console.log('processRow: Target processed successfully');
-            } catch (targetError) {
-                console.error('processRow: Error processing target:', targetError);
-            }
+        // Process targets (only if Target field is not empty)
+        if (row.Target && row.Target.trim()) {
+            const targets = this.csvParser.parseEntities(row.Target);
+            targets.forEach(target => {
+                entityPromises.push(
+                    this.entityProcessor.processEntity(target, 'target', event)
+                        .catch(error => console.error('Error processing target:', error))
+                );
+            });
         }
 
         // Process locations
         if (row.Locations) {
-            console.log('processRow: Processing locations...');
             const locations = this.csvParser.parseLocations(row.Locations);
-            for (const location of locations) {
-                console.log('processRow: Processing location:', location.name);
-                try {
-                    await this.entityProcessor.processLocationEntity(location.name, event);
-                    console.log('processRow: Location processed successfully');
-                } catch (locationError) {
-                    console.error('processRow: Error processing location:', locationError);
-                }
-            }
+            locations.forEach(location => {
+                entityPromises.push(
+                    this.entityProcessor.processLocationEntity(location.name, event)
+                        .catch(error => console.error('Error processing location:', error))
+                );
+            });
         }
-        
-        console.log('processRow: Row processing completed');
+
+        // Wait for all entity processing to complete
+        await Promise.all(entityPromises);
     }
 
     async saveToFirebase() {
         try {
-            // Save people
-            for (const person of this.entityProcessor.processedEntities.people) {
-                await this.firebaseService.saveOrUpdateEntity(person, 'people');
-            }
+            // Use batch operations for much better performance
+            const entities = {
+                people: this.entityProcessor.processedEntities.people,
+                organizations: this.entityProcessor.processedEntities.organizations,
+                places: this.entityProcessor.processedEntities.places,
+                unknown: this.entityProcessor.processedEntities.unknown
+            };
+            
+            const events = this.entityProcessor.processedEntities.events;
+            
+            const result = await this.firebaseService.saveBatch(entities, events);
+            console.log(`Saved data in ${result.batchCount} batch(es)`);
 
-            // Save organizations
-            for (const org of this.entityProcessor.processedEntities.organizations) {
-                await this.firebaseService.saveOrUpdateEntity(org, 'organizations');
-            }
-
-            // Save places
-            for (const place of this.entityProcessor.processedEntities.places) {
-                await this.firebaseService.saveOrUpdateEntity(place, 'places');
-            }
-
-            // Save unknown entities
-            for (const unknown of this.entityProcessor.processedEntities.unknown) {
-                await this.firebaseService.saveOrUpdateEntity(unknown, 'unknown');
-            }
-
-            // Save events
-            for (const event of this.entityProcessor.processedEntities.events) {
-                await this.firebaseService.saveEvent(event);
-            }
-
-            console.log('All data saved to Firebase successfully');
         } catch (error) {
             console.error('Error saving to Firebase:', error);
             throw error;
@@ -319,6 +287,59 @@ export class KnowledgeBaseApp {
         // Hide profile view, show main view
         document.getElementById('profileView').classList.add('hidden');
         document.getElementById('mainView').classList.remove('hidden');
+    }
+
+    async runDeduplication() {
+        try {
+            // Disable the button during processing
+            const deduplicationBtn = document.getElementById('deduplicationBtn');
+            const originalText = deduplicationBtn.textContent;
+            deduplicationBtn.disabled = true;
+            deduplicationBtn.textContent = 'Checking for duplicates...';
+
+            this.showStatus('Analyzing entities for duplicates...', 'info');
+
+            // Get preview of what will be deduplicated
+            const preview = await this.deduplicationService.getDeduplicationPreview();
+            
+            if (preview.totalDuplicatesToRemove === 0) {
+                this.showStatus('No duplicates found with matching Wikidata IDs', 'success');
+                deduplicationBtn.disabled = false;
+                deduplicationBtn.textContent = originalText;
+                return;
+            }
+
+            // Show confirmation dialog
+            const confirmMessage = `Found ${preview.totalDuplicatesToRemove} duplicate entities to remove.\n\nThis will:\n- Keep the oldest entity in each duplicate group\n- Merge all connections and events to the kept entity\n- Delete the duplicate entities\n\nProceed with deduplication?`;
+            
+            if (!confirm(confirmMessage)) {
+                this.showStatus('Deduplication cancelled', 'info');
+                deduplicationBtn.disabled = false;
+                deduplicationBtn.textContent = originalText;
+                return;
+            }
+
+            // Run deduplication
+            deduplicationBtn.textContent = 'Removing duplicates...';
+            this.showStatus('Running deduplication process...', 'info');
+
+            const result = await this.deduplicationService.runDeduplication();
+
+            // Show success message
+            this.showStatus(`Deduplication complete! Removed ${result.duplicatesRemoved} duplicate entities from ${result.duplicateGroupsFound} groups.`, 'success');
+
+            // Refresh the table to show updated data
+            await this.loadExistingData();
+
+        } catch (error) {
+            console.error('Error during deduplication:', error);
+            this.showStatus('Error during deduplication: ' + error.message, 'error');
+        } finally {
+            // Re-enable the button
+            const deduplicationBtn = document.getElementById('deduplicationBtn');
+            deduplicationBtn.disabled = false;
+            deduplicationBtn.textContent = 'Remove Duplicates';
+        }
     }
 
     showEntityProfile(entity) {

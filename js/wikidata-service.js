@@ -6,21 +6,16 @@ export class WikidataService {
     }
 
     async searchWikidata(entityName) {
-        console.log('WikidataService: Searching for', entityName);
-        
         // Clean the entity name before searching
         const cleanedName = this.cleanEntityName(entityName);
-        console.log('WikidataService: Cleaned name:', cleanedName);
         
         // Check cache first (using original name as key)
         if (this.cache.has(entityName)) {
-            console.log('WikidataService: Found in cache');
             return this.cache.get(entityName);
         }
 
         try {
             // Single search query - no variations for speed
-            console.log('WikidataService: Searching for:', cleanedName);
             const searchUrl = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(cleanedName)}&language=en&format=json&origin=*&limit=5`;
             
             // Add timeout to prevent hanging
@@ -31,14 +26,11 @@ export class WikidataService {
                 const response = await fetch(searchUrl, { signal: controller.signal });
                 clearTimeout(timeoutId);
                 const data = await response.json();
-                console.log('WikidataService: Search response received');
                 
                 if (data.search && data.search.length > 0) {
-                    console.log('WikidataService: Found search results, using first match');
                     // Use the first result directly for speed
                     const firstMatch = data.search[0];
                     
-                    console.log('WikidataService: Getting details for first match...');
                     // Get detailed entity data
                     const detailUrl = `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${firstMatch.id}&format=json&origin=*`;
                     
@@ -51,10 +43,8 @@ export class WikidataService {
                         const detailData = await detailResponse.json();
                         
                         if (detailData.entities && detailData.entities[firstMatch.id]) {
-                            console.log('WikidataService: Parsing entity data...');
                             const result = await this.parseWikidataEntity(detailData.entities[firstMatch.id]);
                             this.cache.set(entityName, result);
-                            console.log('WikidataService: Successfully processed', entityName);
                             return result;
                         }
                     } catch (detailError) {
@@ -70,7 +60,6 @@ export class WikidataService {
             console.warn('Wikidata search failed:', error);
         }
         
-        console.log('WikidataService: No results found for', entityName);
         this.cache.set(entityName, null);
         return null;
     }
@@ -129,7 +118,6 @@ export class WikidataService {
     async findBestWikidataMatch(searchResults, originalQuery) {
         // For speed, just return the first result
         if (searchResults && searchResults.length > 0) {
-            console.log(`Using first search result for "${originalQuery}": ${searchResults[0].label} (${searchResults[0].id})`);
             return searchResults[0];
         }
         return null;

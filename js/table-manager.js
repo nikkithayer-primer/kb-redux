@@ -29,17 +29,17 @@ export class TableManager {
     }
 
     updateAllEntities(processedEntities) {
-        // Calculate actual connection counts from events
-        const events = processedEntities.events || [];
-        
+        // Use denormalized connection counts for better performance
         this.allEntities = [
             ...processedEntities.people.map(e => ({...e, category: 'person'})),
             ...processedEntities.organizations.map(e => ({...e, category: 'organization'})),
             ...processedEntities.places.map(e => ({...e, category: 'place'})),
             ...processedEntities.unknown.map(e => ({...e, category: 'unknown'}))
         ].map(entity => {
-            // Calculate real connection count from events
-            const connectionCount = this.calculateConnectionCount(entity, events);
+            // Use the denormalized connection count if available, otherwise calculate it
+            const connectionCount = entity.connectionCount !== undefined 
+                ? entity.connectionCount 
+                : (entity.connections ? entity.connections.length : 0);
             return {
                 ...entity,
                 actualConnectionCount: connectionCount

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Knowledge Base Redux</title>
+    <title>Knowledge Base and Entity Profiles</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <!-- Stylesheets -->
     <link rel="stylesheet" href="css/main.css">
@@ -13,14 +13,14 @@
 <body>
     <div class="container" id="mainView">
         <header>
-            <h1>Knowledge Base Redux</h1>
-            <p class="subtitle">Upload CSV data to build your knowledge graph</p>
+            <h1>Knowledge Base</h1>
+            <p class="subtitle">Import CSV data: Actor, Action, Target, Sentence, Locations, Datetimes</p>
         </header>
 
         <section class="upload-section">
             <div class="upload-area" id="uploadArea">
                 <div class="upload-icon">📄</div>
-                <div class="upload-text">Drop your CSV file here or click to browse</div>
+                <div class="upload-text">Drop CSV file or click to browse</div>
                 <input type="file" id="fileInput" accept=".csv" />
                 <button class="btn" onclick="document.getElementById('fileInput').click()">Choose File</button>
             </div>
@@ -30,11 +30,10 @@
             </div>
             
             <div id="statusMessage"></div>
-            
         </section>
 
         <section class="knowledge-base-section">
-            <h2 class="section-title">Knowledge Base Statistics</h2>
+            <h2 class="section-title">Statistics</h2>
             <div class="stats-grid" id="statsGrid">
                 <div class="stat-card">
                     <div class="stat-number" id="peopleCount">0</div>
@@ -60,26 +59,28 @@
         </section>
 
         <section class="knowledge-base-section">
-            <h2 class="section-title">Knowledge Base Entities</h2>
+            <h2 class="section-title">Entities</h2>
             
-            <!-- Filter and Search Controls -->
             <div class="table-controls">
                 <div class="filter-group">
-                    <label>Filter by Type:</label>
+                    <label>Type</label>
                     <div class="filter-toggles">
-                        <button class="filter-toggle active" data-type="">All Types</button>
+                        <button class="filter-toggle active" data-type="">All</button>
                         <button class="filter-toggle" data-type="person">People</button>
-                        <button class="filter-toggle" data-type="organization">Organizations</button>
+                        <button class="filter-toggle" data-type="organization">Orgs</button>
                         <button class="filter-toggle" data-type="place">Places</button>
                         <button class="filter-toggle" data-type="unknown">Unknown</button>
                     </div>
                 </div>
                 
                 <div class="search-group">
-                    <label for="entitySearch">Search:</label>
-                    <input type="text" id="entitySearch" class="form-input" placeholder="Search entities...">
+                    <label for="entitySearch">Search</label>
+                    <input type="text" id="entitySearch" class="form-input" placeholder="Search...">
                 </div>
                 
+                <div class="action-group">
+                    <button class="btn btn-warning" id="deduplicationBtn">Dedupe</button>
+                </div>
             </div>
             
             <!-- Table View -->
@@ -106,9 +107,9 @@
     <!-- Profile View (Hidden by default) -->
     <div class="profile-container hidden" id="profileView">
         <header class="profile-header-nav">
-            <button class="back-btn" id="backToMainBtn">← Back to Knowledge Base</button>
+            <button class="back-btn" id="backToMainBtn">← Back</button>
             <div>
-                <button class="btn btn-secondary" id="editBtn">Edit Entity</button>
+                <button class="btn btn-secondary" id="editBtn">Edit</button>
             </div>
         </header>
 
@@ -127,14 +128,14 @@
                 </div>
                 
                 <div class="entity-actions">
-                    <button class="btn btn-secondary" id="exportBtn">Export Data</button>
+                    <button class="btn btn-secondary" id="exportBtn">Export</button>
                 </div>
             </div>
         </div>
 
         <div class="content-grid">
             <div class="content-section">
-                <h2 class="section-title">Connection Network</h2>
+                <h2 class="section-title">Network</h2>
                 <div class="network-container" style="position: relative;">
                     <div id="networkGraph"></div>
                     <div class="network-legend">
@@ -155,19 +156,19 @@
             </div>
             
             <div class="content-section">
-                <h2 class="section-title">Event Locations</h2>
+                <h2 class="section-title">Locations</h2>
                 <div id="map"></div>
             </div>
             
             <div class="content-section">
-                <h2 class="section-title">Recent Connections</h2>
+                <h2 class="section-title">Connections</h2>
                 <div class="connections-list" id="connectionsList">
                     <!-- Connections will be populated here -->
                 </div>
             </div>
             
             <div class="content-section">
-                <h2 class="section-title">Related Events</h2>
+                <h2 class="section-title">Events</h2>
                 <div class="events-list" id="eventsList">
                     <!-- Events will be populated here -->
                 </div>
@@ -177,7 +178,7 @@
 
 
     <!-- Edit Modal -->
-    <div class="modal" id="editModal">
+    <div class="modal hidden" id="editModal">
         <div class="modal-content">
             <div class="modal-header">
                 <h3 class="modal-title">Edit Entity</h3>
@@ -226,7 +227,7 @@
                 
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" id="cancelEditBtn">Cancel</button>
-                    <button type="submit" class="btn">Save Changes</button>
+                    <button type="submit" class="btn">Save</button>
                 </div>
             </form>
         </div>

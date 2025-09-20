@@ -96,15 +96,11 @@ class EntityProfile {
                 ...entitySnapshot.docs[0].data() 
             };
             
-            console.log('Current entity loaded:', this.currentEntity);
-            
             // Load all entities for connections
             await this.loadAllEntities();
-            console.log('All entities loaded:', this.allEntities.length);
             
             // Load all events
             await this.loadAllEvents();
-            console.log('All events loaded:', this.allEvents.length);
             
             // Render the profile
             this.renderEntityProfile();
@@ -331,7 +327,7 @@ class EntityProfile {
         // Find events where this entity is involved
         const relatedEvents = this.allEvents.filter(event => 
             event.actor.includes(this.currentEntity.name) || 
-            event.target.includes(this.currentEntity.name) ||
+            (event.target && event.target.includes(this.currentEntity.name)) ||
             (Array.isArray(event.locations) 
                 ? event.locations.some(loc => (typeof loc === 'string' ? loc : loc.name) === this.currentEntity.name)
                 : event.locations && event.locations.includes(this.currentEntity.name))
@@ -355,7 +351,7 @@ class EntityProfile {
             
             // Parse entities from the event
             const actors = event.actor.split(',').map(a => a.trim());
-            const targets = event.target.split(',').map(t => t.trim());
+            const targets = event.target ? event.target.split(',').map(t => t.trim()).filter(t => t.length > 0) : [];
             const locations = Array.isArray(event.locations) 
                 ? event.locations.map(loc => typeof loc === 'string' ? loc : loc.name)
                 : (event.locations ? event.locations.split(',').map(l => l.trim()) : []);
@@ -421,14 +417,14 @@ class EntityProfile {
         // Find events related to this entity
         const relatedEvents = this.allEvents.filter(event => 
             event.actor.includes(this.currentEntity.name) || 
-            event.target.includes(this.currentEntity.name) ||
+            (event.target && event.target.includes(this.currentEntity.name)) ||
             (Array.isArray(event.locations) 
                 ? event.locations.some(loc => (typeof loc === 'string' ? loc : loc.name) === this.currentEntity.name)
                 : event.locations && event.locations.includes(this.currentEntity.name))
         );
         
         if (relatedEvents.length === 0) {
-            eventsList.innerHTML = '<p style="color: #7f8c8d; text-align: center; padding: 20px;">No related events found</p>';
+            eventsList.innerHTML = '<div class="events-empty">No related events found</div>';
             return;
         }
         
@@ -439,21 +435,25 @@ class EntityProfile {
             return dateB - dateA;
         });
         
-        sortedEvents.slice(0, 10).forEach(event => {
+        sortedEvents.slice(0, 15).forEach((event, index) => {
             const eventItem = document.createElement('div');
             eventItem.className = 'event-item';
             
             // Format the date properly
             const eventDate = this.parseEventDate(event.dateReceived);
-            const dateString = eventDate ? eventDate.toLocaleDateString() : 'Unknown date';
+            const dateString = eventDate ? this.formatTimelineDate(eventDate) : 'Unknown date';
+            
+            // Format location with icon
+            const locationText = Array.isArray(event.locations) 
+                ? event.locations.map(loc => typeof loc === 'string' ? loc : loc.name).filter(l => l).join(', ')
+                : event.locations || '';
             
             eventItem.innerHTML = `
-                <div class="event-sentence">${event.sentence}</div>
+                <div class="event-date">${dateString}</div>
+                <div class="event-sentence">${event.sentence || 'No description available'}</div>
                 <div class="event-meta">
-                    <span>${dateString}</span>
-                    <span class="event-location">${Array.isArray(event.locations) 
-                        ? event.locations.map(loc => typeof loc === 'string' ? loc : loc.name).join(', ')
-                        : event.locations || ''}</span>
+                    <span class="event-action">${event.action}</span>
+                    ${locationText ? `<span class="event-location">${locationText}</span>` : ''}
                 </div>
             `;
             
@@ -496,7 +496,6 @@ class EntityProfile {
         nodes.push(centerEntity);
         processedEntities.add(centerEntity.id);
         
-        console.log('Building network graph for:', centerEntity.name);
         
         // Find first-degree connections (direct connections to center entity)
         const firstDegreeConnections = this.getEntityConnections(centerEntity);
@@ -543,12 +542,6 @@ class EntityProfile {
             }
         });
         
-        console.log(`Network graph: ${nodes.length} nodes, ${links.length} links`);
-        console.log('Degree distribution:', {
-            center: nodes.filter(n => n.degree === 0).length,
-            firstDegree: nodes.filter(n => n.degree === 1).length,
-            secondDegree: nodes.filter(n => n.degree === 2).length
-        });
         
         // Create force simulation with different forces for different degrees
         const simulation = d3.forceSimulation(nodes)
@@ -564,7 +557,7 @@ class EntityProfile {
             .enter().append('line')
             .attr('stroke', d => this.getLinkColor(d.relationshipType, d.isDirect))
             .attr('stroke-opacity', 0.8)
-            .attr('stroke-width', d => d.isDirect ? 3 : 2)
+            .attr('stroke-width', d => d.isDirect ? 2 : 1)
             .attr('stroke-dasharray', d => d.isDirect ? '0' : '5,5');
         
         // Add nodes with different sizes for different degrees
@@ -730,7 +723,7 @@ class EntityProfile {
         // Find all events where this entity is involved
         const relatedEvents = this.allEvents.filter(event => 
             event.actor.includes(entity.name) || 
-            event.target.includes(entity.name) ||
+            (event.target && event.target.includes(entity.name)) ||
             (Array.isArray(event.locations) 
                 ? event.locations.some(loc => (typeof loc === 'string' ? loc : loc.name) === entity.name)
                 : event.locations && event.locations.includes(entity.name))
@@ -738,7 +731,7 @@ class EntityProfile {
         
         relatedEvents.forEach(event => {
             const actors = event.actor.split(',').map(a => a.trim());
-            const targets = event.target.split(',').map(t => t.trim());
+            const targets = event.target ? event.target.split(',').map(t => t.trim()).filter(t => t.length > 0) : [];
             const locations = Array.isArray(event.locations) 
                 ? event.locations.map(loc => typeof loc === 'string' ? loc : loc.name)
                 : (event.locations ? event.locations.split(',').map(l => l.trim()) : []);
@@ -807,7 +800,7 @@ class EntityProfile {
             if (relationshipType.includes('target of')) {
                 return '#e74c3c'; // Red for being targeted
             } else {
-                return '#2980b9'; // Blue for acting upon
+                return '#999'; // Blue for acting upon
             }
         } else {
             // Neutral relationships - muted colors
@@ -888,7 +881,7 @@ class EntityProfile {
         // Find events related to this entity
         const relatedEvents = this.allEvents.filter(event => 
             event.actor.includes(this.currentEntity.name) || 
-            event.target.includes(this.currentEntity.name) ||
+            (event.target && event.target.includes(this.currentEntity.name)) ||
             (Array.isArray(event.locations) 
                 ? event.locations.some(loc => (typeof loc === 'string' ? loc : loc.name) === this.currentEntity.name)
                 : event.locations && event.locations.includes(this.currentEntity.name))
@@ -980,15 +973,44 @@ class EntityProfile {
         }
     }
 
+    formatTimelineDate(date) {
+        if (!date) return 'Unknown';
+        
+        const now = new Date();
+        const diffTime = Math.abs(now - date);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        // Format based on how recent the event is
+        if (diffDays === 0) {
+            return 'Today';
+        } else if (diffDays === 1) {
+            return 'Yesterday';
+        } else if (diffDays < 7) {
+            return `${diffDays} days ago`;
+        } else if (diffDays < 30) {
+            const weeks = Math.floor(diffDays / 7);
+            return weeks === 1 ? '1 week ago' : `${weeks} weeks ago`;
+        } else if (diffDays < 365) {
+            const months = Math.floor(diffDays / 30);
+            return months === 1 ? '1 month ago' : `${months} months ago`;
+        } else {
+            return date.toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric' 
+            });
+        }
+    }
+
     showEditModal() {
         this.populateEditForm();
         const editModal = document.getElementById('editModal');
-        editModal.style.display = 'flex';
+        editModal.classList.remove('hidden');
     }
 
     hideEditModal() {
         const editModal = document.getElementById('editModal');
-        editModal.style.display = 'none';
+        editModal.classList.add('hidden');
         this.resetEditForm();
     }
 
@@ -1115,12 +1137,10 @@ class EntityProfile {
             const typeChanged = originalType !== newType;
             
             if (typeChanged) {
-                console.log(`Entity type changed from ${originalType} to ${newType}, moving between collections`);
                 
                 // Delete from old collection
                 const oldEntityRef = doc(db, this.entityType, this.currentEntity.firestoreId);
                 await deleteDoc(oldEntityRef);
-                console.log(`Deleted entity from ${this.entityType} collection`);
                 
                 // Determine new collection name
                 const newCollectionName = this.getCollectionNameForType(newType);
@@ -1131,7 +1151,6 @@ class EntityProfile {
                 delete newEntityData.firestoreCollection;
                 
                 const newDocRef = await addDoc(collection(db, newCollectionName), newEntityData);
-                console.log(`Created entity in ${newCollectionName} collection with ID: ${newDocRef.id}`);
                 
                 // Update entity with new firestore info
                 updatedEntity.firestoreId = newDocRef.id;
@@ -1146,7 +1165,6 @@ class EntityProfile {
                 delete updateData.firestoreId;
                 delete updateData.firestoreCollection;
                 await updateDoc(entityRef, updateData);
-                console.log(`Updated entity in ${this.entityType} collection`);
             }
             
             // Update local data
@@ -1486,7 +1504,6 @@ class EntityProfile {
                 delete updateData.firestoreCollection;
                 
                 await updateDoc(entityRef, updateData);
-                console.log(`Updated entity in Firebase: ${updatedEntity.name}`);
             }
 
             // Update local entity

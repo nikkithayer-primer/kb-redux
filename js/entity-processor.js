@@ -12,6 +12,11 @@ export class EntityProcessor {
             unknown: [],
             events: []
         };
+        
+        // Caching systems for performance optimization
+        this.entityCache = new Map(); // Cache for Firebase entity lookups
+        this.wikidataCache = new Map(); // Cache for Wikidata API calls
+        this.nameVariationCache = new Map(); // Cache for name variations
     }
 
     async processEntity(entityName, role, event) {
@@ -19,15 +24,7 @@ export class EntityProcessor {
         let entity = this.findExistingEntity(entityName);
         
         if (!entity) {
-            // Check Firebase
-            entity = await this.firebaseService.findEntityInFirebase(entityName, [entityName]);
-        }
-        
-        if (entity) {
-            // Entity exists, add it to processed list if not already there
-            this.ensureEntityInProcessedList(entity);
-        } else {
-            // Create new entity
+            // Always create new entity during ingest - deduplication happens separately
             entity = await this.createNewEntity(entityName, role);
         }
         
@@ -48,29 +45,34 @@ export class EntityProcessor {
             
             if (!entity.connections) entity.connections = [];
             entity.connections.push(connection);
+            
+            // Update denormalized connection count
+            entity.connectionCount = (entity.connectionCount || 0) + 1;
         }
         
         return entity;
     }
 
     async processLocationEntity(locationName, event) {
-        console.log('EntityProcessor: Processing location entity', locationName);
         let entity = this.findExistingEntity(locationName);
         
         if (!entity) {
-            entity = await this.firebaseService.findEntityInFirebase(locationName, [locationName]);
-        }
-        
-        if (entity) {
-            this.ensureEntityInProcessedList(entity);
-        } else {
+            // Always create new entity during ingest - deduplication happens separately
             let wikidataInfo = null;
             
-            try {
-                wikidataInfo = await this.wikidataService.searchWikidata(locationName);
-                console.log('EntityProcessor: Wikidata search completed for location', locationName);
-            } catch (error) {
-                console.warn('EntityProcessor: Wikidata search failed for location', locationName, error);
+            // Check Wikidata cache first
+            if (this.wikidataCache.has(locationName)) {
+                wikidataInfo = this.wikidataCache.get(locationName);
+            } else {
+                try {
+                    wikidataInfo = await this.wikidataService.searchWikidata(locationName);
+                    // Cache the result for future use
+                    this.wikidataCache.set(locationName, wikidataInfo);
+                } catch (error) {
+                    console.warn('EntityProcessor: Wikidata search failed for location', locationName, error);
+                    // Cache null results to avoid repeated failed API calls
+                    this.wikidataCache.set(locationName, null);
+                }
             }
             
             entity = {
@@ -106,20 +108,30 @@ export class EntityProcessor {
             
             if (!entity.connections) entity.connections = [];
             entity.connections.push(connection);
+            
+            // Update denormalized connection count
+            entity.connectionCount = (entity.connectionCount || 0) + 1;
         }
         
         return entity;
     }
 
     async createNewEntity(entityName, role) {
-        console.log('EntityProcessor: Creating new entity for', entityName);
         let wikidataInfo = null;
         
-        try {
-            wikidataInfo = await this.wikidataService.searchWikidata(entityName);
-            console.log('EntityProcessor: Wikidata search completed for', entityName);
-        } catch (error) {
-            console.warn('EntityProcessor: Wikidata search failed for', entityName, error);
+        // Check Wikidata cache first
+        if (this.wikidataCache.has(entityName)) {
+            wikidataInfo = this.wikidataCache.get(entityName);
+        } else {
+            try {
+                wikidataInfo = await this.wikidataService.searchWikidata(entityName);
+                // Cache the result for future use
+                this.wikidataCache.set(entityName, wikidataInfo);
+            } catch (error) {
+                console.warn('EntityProcessor: Wikidata search failed for', entityName, error);
+                // Cache null results to avoid repeated failed API calls
+                this.wikidataCache.set(entityName, null);
+            }
         }
         
         const entity = {
@@ -138,10 +150,12 @@ export class EntityProcessor {
             this.processedEntities.people.push(entity);
         } else if (entity.type === 'organization') {
             this.processedEntities.organizations.push(entity);
-        } else {
-            entity.type = 'place';
+        } else if (entity.type === 'place') {
             entity.category = this.classifyLocation(entityName, wikidataInfo);
             this.processedEntities.places.push(entity);
+        } else {
+            // entity.type === 'unknown'
+            this.processedEntities.unknown.push(entity);
         }
         
         return entity;
@@ -237,6 +251,11 @@ export class EntityProcessor {
     }
 
     generateSearchVariations(query) {
+        // Check cache first
+        if (this.nameVariationCache.has(query)) {
+            return this.nameVariationCache.get(query);
+        }
+        
         const variations = [query];
         const lowerQuery = query.toLowerCase().trim();
         
@@ -262,8 +281,28 @@ export class EntityProcessor {
             variations.push(noPunctuation);
         }
         
-        // Remove duplicates and return
-        return [...new Set(variations)];
+        // Remove duplicates
+        const uniqueVariations = [...new Set(variations)];
+        
+        // Cache the result
+        this.nameVariationCache.set(query, uniqueVariations);
+        
+        return uniqueVariations;
+    }
+
+    // Cache management methods
+    clearCaches() {
+        this.entityCache.clear();
+        this.wikidataCache.clear();
+        this.nameVariationCache.clear();
+    }
+
+    getCacheStats() {
+        return {
+            entityCacheSize: this.entityCache.size,
+            wikidataCacheSize: this.wikidataCache.size,
+            nameVariationCacheSize: this.nameVariationCache.size
+        };
     }
 
     parseEntities(entityString) {

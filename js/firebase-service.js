@@ -1,7 +1,7 @@
 // Firebase database operations
 
 import { db } from './config.js';
-import { collection, addDoc, updateDoc, doc, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { collection, addDoc, updateDoc, doc, getDocs, query, where, writeBatch, limit, startAfter, orderBy } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 export class FirebaseService {
     constructor() {
@@ -18,10 +18,8 @@ export class FirebaseService {
                 delete updateData.firestoreId;
                 delete updateData.firestoreCollection;
                 await updateDoc(entityRef, updateData);
-                console.log(`Updated existing ${collectionName.slice(0, -1)}: ${entity.name}`);
             } else {
                 await addDoc(collection(this.db, collectionName), sanitizedEntity);
-                console.log(`Created new ${collectionName.slice(0, -1)}: ${entity.name}`);
             }
         } catch (error) {
             console.error(`Error saving ${collectionName.slice(0, -1)} ${entity.name}:`, error);
@@ -33,7 +31,6 @@ export class FirebaseService {
         try {
             const sanitizedEvent = this.sanitizeDataForFirebase(event);
             await addDoc(collection(this.db, 'events'), sanitizedEvent);
-            console.log(`Saved event: ${event.sentence}`);
         } catch (error) {
             console.error('Error saving event:', error);
             throw error;
@@ -53,9 +50,6 @@ export class FirebaseService {
                     
                     if (!nameSnapshot.empty) {
                         const doc = nameSnapshot.docs[0];
-                        if (variation !== name) {
-                            console.log(`Found Firebase entity match for "${name}" -> "${variation}": ${doc.data().name}`);
-                        }
                         return {
                             firestoreId: doc.id,
                             firestoreCollection: collectionName,
@@ -69,9 +63,6 @@ export class FirebaseService {
                     
                     if (!aliasSnapshot.empty) {
                         const doc = aliasSnapshot.docs[0];
-                        if (variation !== name) {
-                            console.log(`Found Firebase entity alias match for "${name}" -> "${variation}": ${doc.data().name}`);
-                        }
                         return {
                             firestoreId: doc.id,
                             firestoreCollection: collectionName,
@@ -161,6 +152,77 @@ export class FirebaseService {
         return data;
     }
 
+    async saveBatch(entities, events) {
+        try {
+            const batch = writeBatch(this.db);
+            let operationCount = 0;
+            const maxBatchSize = 500; // Firestore batch limit
+            const batches = [];
+
+            // Helper function to create a new batch when needed
+            const createNewBatch = () => {
+                if (operationCount > 0) {
+                    batches.push(batch);
+                }
+                return writeBatch(this.db);
+            };
+
+            let currentBatch = batch;
+
+            // Add entities to batch
+            for (const [collectionName, entityList] of Object.entries(entities)) {
+                for (const entity of entityList) {
+                    if (operationCount >= maxBatchSize) {
+                        currentBatch = createNewBatch();
+                        operationCount = 0;
+                    }
+
+                    const sanitizedEntity = this.sanitizeDataForFirebase(entity);
+                    
+                    if (entity.firestoreId) {
+                        // Update existing entity
+                        const entityRef = doc(this.db, collectionName, entity.firestoreId);
+                        const updateData = { ...sanitizedEntity };
+                        delete updateData.firestoreId;
+                        delete updateData.firestoreCollection;
+                        currentBatch.update(entityRef, updateData);
+                    } else {
+                        // Add new entity
+                        const entityRef = doc(collection(this.db, collectionName));
+                        currentBatch.set(entityRef, sanitizedEntity);
+                    }
+                    operationCount++;
+                }
+            }
+
+            // Add events to batch
+            for (const event of events) {
+                if (operationCount >= maxBatchSize) {
+                    currentBatch = createNewBatch();
+                    operationCount = 0;
+                }
+
+                const sanitizedEvent = this.sanitizeDataForFirebase(event);
+                const eventRef = doc(collection(this.db, 'events'));
+                currentBatch.set(eventRef, sanitizedEvent);
+                operationCount++;
+            }
+
+            // Add the final batch if it has operations
+            if (operationCount > 0) {
+                batches.push(currentBatch);
+            }
+
+            // Execute all batches
+            await Promise.all(batches.map(b => b.commit()));
+            
+            return { success: true, batchCount: batches.length };
+        } catch (error) {
+            console.error('Error in batch save:', error);
+            throw error;
+        }
+    }
+
     async loadExistingData() {
         try {
             const collections = ['people', 'organizations', 'places', 'unknown', 'events'];
@@ -172,22 +234,23 @@ export class FirebaseService {
                 events: []
             };
 
-            for (const collectionName of collections) {
+            // Load all collections in parallel for better performance
+            const loadPromises = collections.map(async (collectionName) => {
                 const snapshot = await getDocs(collection(this.db, collectionName));
+                const items = [];
                 snapshot.forEach(doc => {
-                    data[collectionName].push({
+                    items.push({
                         firestoreId: doc.id,
                         firestoreCollection: collectionName,
                         ...doc.data()
                     });
                 });
-            }
+                return { collectionName, items };
+            });
 
-            console.log('Loaded existing data from Firebase:', {
-                people: data.people.length,
-                organizations: data.organizations.length,
-                places: data.places.length,
-                events: data.events.length
+            const results = await Promise.all(loadPromises);
+            results.forEach(({ collectionName, items }) => {
+                data[collectionName] = items;
             });
 
             return data;
@@ -197,8 +260,96 @@ export class FirebaseService {
                 people: [],
                 organizations: [],
                 places: [],
+                unknown: [],
                 events: []
             };
+        }
+    }
+
+    async loadEntitiesPaginated(collectionName, pageSize = 100, lastDoc = null) {
+        try {
+            let q = query(
+                collection(this.db, collectionName),
+                orderBy('name'),
+                limit(pageSize)
+            );
+
+            if (lastDoc) {
+                q = query(
+                    collection(this.db, collectionName),
+                    orderBy('name'),
+                    startAfter(lastDoc),
+                    limit(pageSize)
+                );
+            }
+
+            const snapshot = await getDocs(q);
+            const entities = [];
+            let lastDocument = null;
+
+            snapshot.forEach(doc => {
+                entities.push({
+                    firestoreId: doc.id,
+                    firestoreCollection: collectionName,
+                    ...doc.data()
+                });
+                lastDocument = doc;
+            });
+
+            return {
+                entities,
+                lastDoc: lastDocument,
+                hasMore: entities.length === pageSize
+            };
+        } catch (error) {
+            console.error(`Error loading paginated ${collectionName}:`, error);
+            return { entities: [], lastDoc: null, hasMore: false };
+        }
+    }
+
+    async loadEventsPaginated(pageSize = 100, lastDoc = null, filters = {}) {
+        try {
+            let q = query(
+                collection(this.db, 'events'),
+                orderBy('dateReceived', 'desc'),
+                limit(pageSize)
+            );
+
+            // Add filters if provided
+            if (filters.actor) {
+                q = query(q, where('actor', '==', filters.actor));
+            }
+            if (filters.target) {
+                q = query(q, where('target', '==', filters.target));
+            }
+            if (filters.action) {
+                q = query(q, where('action', '==', filters.action));
+            }
+
+            if (lastDoc) {
+                q = query(q, startAfter(lastDoc));
+            }
+
+            const snapshot = await getDocs(q);
+            const events = [];
+            let lastDocument = null;
+
+            snapshot.forEach(doc => {
+                events.push({
+                    firestoreId: doc.id,
+                    ...doc.data()
+                });
+                lastDocument = doc;
+            });
+
+            return {
+                events,
+                lastDoc: lastDocument,
+                hasMore: events.length === pageSize
+            };
+        } catch (error) {
+            console.error('Error loading paginated events:', error);
+            return { events: [], lastDoc: null, hasMore: false };
         }
     }
 }
