@@ -6,7 +6,7 @@ import { FirebaseService } from './firebase-service.js';
 import { DateTimeProcessor } from './datetime-processor.js';
 import { EntityProcessor } from './entity-processor.js';
 import { TableManager } from './table-manager.js';
-import { EntityProfile } from '../profile.js';
+import { EntityProfile } from './profile.js';
 
 export class KnowledgeBaseApp {
     constructor() {
@@ -26,12 +26,7 @@ export class KnowledgeBaseApp {
     initializeEventListeners() {
         // File upload
         const fileInput = document.getElementById('fileInput');
-        const processBtn = document.getElementById('processBtn');
-        const clearBtn = document.getElementById('clearBtn');
-
         fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
-        processBtn.addEventListener('click', () => this.processData());
-        clearBtn.addEventListener('click', () => this.clearData());
         
         // Table manager events
         this.tableManager.initializeEventListeners();
@@ -57,8 +52,6 @@ export class KnowledgeBaseApp {
             this.showStatus(`Loaded ${rows.length} rows from CSV`, 'success');
             console.log('Parsed CSV data:', rows);
             
-            // Show processing controls
-            document.getElementById('processingControls').classList.remove('hidden');
             
             // Automatically start processing the data
             setTimeout(() => this.processData(), 1000);
@@ -224,6 +217,11 @@ export class KnowledgeBaseApp {
                 await this.firebaseService.saveOrUpdateEntity(place, 'places');
             }
 
+            // Save unknown entities
+            for (const unknown of this.entityProcessor.processedEntities.unknown) {
+                await this.firebaseService.saveOrUpdateEntity(unknown, 'unknown');
+            }
+
             // Save events
             for (const event of this.entityProcessor.processedEntities.events) {
                 await this.firebaseService.saveEvent(event);
@@ -247,8 +245,8 @@ export class KnowledgeBaseApp {
             // Update table
             this.renderEntities();
             
-            if (existingData.people.length + existingData.organizations.length + existingData.places.length > 0) {
-                this.showStatus(`Loaded existing data: ${existingData.people.length} people, ${existingData.organizations.length} organizations, ${existingData.places.length} places`, 'success');
+            if (existingData.people.length + existingData.organizations.length + existingData.places.length + existingData.unknown.length > 0) {
+                this.showStatus(`Loaded existing data: ${existingData.people.length} people, ${existingData.organizations.length} organizations, ${existingData.places.length} places, ${existingData.unknown.length} unknown`, 'success');
             }
         } catch (error) {
             console.error('Error loading existing data:', error);
@@ -265,6 +263,7 @@ export class KnowledgeBaseApp {
         document.getElementById('peopleCount').textContent = this.entityProcessor.processedEntities.people.length;
         document.getElementById('organizationsCount').textContent = this.entityProcessor.processedEntities.organizations.length;
         document.getElementById('placesCount').textContent = this.entityProcessor.processedEntities.places.length;
+        document.getElementById('unknownCount').textContent = this.entityProcessor.processedEntities.unknown.length;
         document.getElementById('eventsCount').textContent = this.entityProcessor.processedEntities.events.length;
     }
 
@@ -286,8 +285,6 @@ export class KnowledgeBaseApp {
         // Clear table
         this.tableManager.clearTable();
         
-        // Hide processing controls
-        document.getElementById('processingControls').classList.add('hidden');
         
         this.showStatus('Data cleared', 'info');
     }
@@ -328,7 +325,8 @@ export class KnowledgeBaseApp {
         // Navigate to profile page (legacy method, now redirects to showProfile)
         const entityType = entity.category || entity.type;
         const typeParam = entityType === 'person' ? 'people' : 
-                         entityType === 'organization' ? 'organizations' : 'places';
+                         entityType === 'organization' ? 'organizations' : 
+                         entityType === 'unknown' ? 'unknown' : 'places';
         this.showProfile(entity.id, typeParam);
     }
 }

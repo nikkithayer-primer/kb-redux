@@ -1,0 +1,12 @@
+Actor,Action,Target,Sentence,Date Received,Locations,Datetimes
+Emma Wilson,departed,Seattle,Emma Wilson departed Seattle and traveled to San Francisco.,2025-09-18T17:35:32.029506,"Seattle, San Francisco",Monday
+Emma Wilson,arrived,San Francisco,Emma Wilson arrived in San Francisco.,2025-09-18T17:35:32.029516,San Francisco,Monday
+Emma Wilson,checked in,Tech Corp,Emma Wilson checked in at Tech Corp.,2025-09-18T17:35:32.029519,San Francisco,Monday afternoon
+Emma Wilson,attended,a business dinner,Emma Wilson attended a business dinner with Tech Corp executives.,2025-09-18T17:35:32.029521,San Francisco,Monday evening
+Emma Wilson,departed,San Francisco,Emma Wilson departed San Francisco and traveled to Boston.,2025-09-18T17:35:32.029524,"San Francisco, Boston",Tuesday morning
+Emma Wilson,met with,Sarah Johnson,Emma Wilson met with Sarah Johnson in Boston.,2025-09-18T17:35:32.029526,Boston,Tuesday afternoon
+Emma Wilson,checked into,the Grand Boston Hotel,Emma Wilson checked into the Grand Boston Hotel.,2025-09-18T17:35:32.029528,Boston,Tuesday evening
+Emma Wilson,gave,a keynote speech,Emma Wilson gave a keynote speech at a Boston tech conference.,2025-09-18T17:35:32.029530,Boston,Wednesday morning
+Emma Wilson,departed,Boston,Emma Wilson departed Boston and traveled to New York City.,2025-09-18T17:35:32.029533,"Boston, New York City",Wednesday afternoon
+Emma Wilson,met with,investors,Emma Wilson met with investors in New York City.,2025-09-18T17:35:32.029535,New York City,Thursday morning
+Emma Wilson,departed,New York City,Emma Wilson departed New York City and returned to Seattle.,2025-09-18T17:35:32.029538,"New York City, Seattle",Thursday evening

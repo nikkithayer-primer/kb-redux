@@ -1,5 +1,5 @@
 import { db } from './config.js';
-import { collection, doc, getDocs, updateDoc, query, where } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { collection, doc, getDocs, updateDoc, query, where, deleteDoc, addDoc } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 class EntityProfile {
     constructor(entityId = null, entityType = null) {
@@ -72,12 +72,6 @@ class EntityProfile {
         safeAddEventListener('wikidataSearch', 'input', (e) => this.searchWikidata(e.target.value));
         safeAddEventListener('editWikidataId', 'input', (e) => this.validateWikidataId(e.target.value));
         
-        // Merge functionality
-        safeAddEventListener('mergeBtn', 'click', () => this.showMergeModal());
-        safeAddEventListener('closeMergeModal', 'click', () => this.hideMergeModal());
-        safeAddEventListener('cancelMergeBtn', 'click', () => this.hideMergeModal());
-        safeAddEventListener('confirmMergeBtn', 'click', () => this.performMerge());
-        safeAddEventListener('fetchWikidataBtn', 'click', () => this.fetchWikidataInfo());
         
         // Other actions
         safeAddEventListener('exportBtn', 'click', () => this.exportEntityData());
@@ -116,8 +110,14 @@ class EntityProfile {
             this.renderEntityProfile();
             this.renderConnections();
             this.renderEvents();
+            
+            // Only show network graph and map for known entity types
+            if (this.currentEntity.type !== 'unknown') {
             this.initializeNetworkGraph();
             this.initializeMap();
+            } else {
+                this.hideNetworkGraphAndMap();
+            }
             
         } catch (error) {
             console.error('Error loading entity data:', error);
@@ -161,20 +161,21 @@ class EntityProfile {
         document.getElementById('entityType').textContent = entity.type || entity.category || 'Entity';
         document.getElementById('entityDescription').textContent = entity.description || 'No description available';
         
-        // Render meta information
+        // Render comprehensive data grid
         const metaContainer = document.getElementById('entityMeta');
         metaContainer.innerHTML = '';
+        metaContainer.className = 'entity-data-grid';
         
-        const metaFields = this.getMetaFields(entity);
-        metaFields.forEach(field => {
-            if (field.value) {
-                const metaItem = document.createElement('div');
-                metaItem.className = 'meta-item';
-                metaItem.innerHTML = `
-                    <div class="meta-label">${field.label}</div>
-                    <div class="meta-value">${field.value}</div>
+        const allFields = this.getAllEntityFields(entity);
+        allFields.forEach(field => {
+            if (field.value !== null && field.value !== undefined && field.value !== '') {
+                const gridItem = document.createElement('div');
+                gridItem.className = 'data-grid-item';
+                gridItem.innerHTML = `
+                    <div class="data-label">${field.label}</div>
+                    <div class="data-value">${field.value}</div>
                 `;
-                metaContainer.appendChild(metaItem);
+                metaContainer.appendChild(gridItem);
             }
         });
     }
@@ -216,6 +217,111 @@ class EntityProfile {
         }
         
         return commonFields;
+    }
+
+    getAllEntityFields(entity) {
+        const fields = [];
+        
+        // Helper function to format values
+        const formatValue = (value) => {
+            if (value === null || value === undefined) return null;
+            if (Array.isArray(value)) {
+                return value.length > 0 ? value.join(', ') : null;
+            }
+            if (typeof value === 'object') {
+                if (value.lat && value.lng) {
+                    return `${value.lat}, ${value.lng}`;
+                }
+                return JSON.stringify(value);
+            }
+            if (typeof value === 'boolean') {
+                return value ? 'Yes' : 'No';
+            }
+            if (typeof value === 'number') {
+                return value.toLocaleString();
+            }
+            return String(value);
+        };
+
+        // Core identification fields
+        if (entity.id) fields.push({ label: 'Entity ID', value: entity.id });
+        if (entity.firestoreId) fields.push({ label: 'Database ID', value: entity.firestoreId });
+        if (entity.wikidata_id) {
+            fields.push({ 
+                label: 'Wikidata ID', 
+                value: `<a href="https://www.wikidata.org/wiki/${entity.wikidata_id}" target="_blank" class="wikidata-link">${entity.wikidata_id}</a>`
+            });
+        }
+        
+        // Names and aliases
+        if (entity.aliases && entity.aliases.length > 0) {
+            fields.push({ label: 'Aliases', value: formatValue(entity.aliases) });
+        }
+        
+        // Type and category information
+        if (entity.type && entity.type !== entity.category) {
+            fields.push({ label: 'Type', value: entity.type });
+        }
+        if (entity.category) fields.push({ label: 'Category', value: entity.category });
+        
+        // Person-specific fields
+        if (entity.occupation) fields.push({ label: 'Occupation', value: entity.occupation });
+        if (entity.jobTitle) fields.push({ label: 'Job Title', value: entity.jobTitle });
+        if (entity.currentEmployer) fields.push({ label: 'Current Employer', value: entity.currentEmployer });
+        if (entity.previousEmployers) fields.push({ label: 'Previous Employers', value: formatValue(entity.previousEmployers) });
+        if (entity.organization) fields.push({ label: 'Organization', value: entity.organization });
+        if (entity.educatedAt) fields.push({ label: 'Education', value: formatValue(entity.educatedAt) });
+        if (entity.currentResidence) fields.push({ label: 'Current Residence', value: entity.currentResidence });
+        if (entity.previousResidences) fields.push({ label: 'Previous Residences', value: formatValue(entity.previousResidences) });
+        if (entity.dateOfBirth) fields.push({ label: 'Date of Birth', value: entity.dateOfBirth });
+        if (entity.gender) fields.push({ label: 'Gender', value: entity.gender });
+        if (entity.expertise) fields.push({ label: 'Expertise', value: formatValue(entity.expertise) });
+        
+        // Organization-specific fields
+        if (entity.industry) fields.push({ label: 'Industry', value: entity.industry });
+        if (entity.founded) fields.push({ label: 'Founded', value: entity.founded });
+        if (entity.employees) fields.push({ label: 'Employees', value: formatValue(entity.employees) });
+        
+        // Location-specific fields
+        if (entity.location) fields.push({ label: 'Location', value: entity.location });
+        if (entity.country) fields.push({ label: 'Country', value: entity.country });
+        if (entity.state) fields.push({ label: 'State', value: entity.state });
+        if (entity.population) fields.push({ label: 'Population', value: formatValue(entity.population) });
+        if (entity.coordinates) fields.push({ label: 'Coordinates', value: formatValue(entity.coordinates) });
+        
+        // Connection and activity information
+        if (entity.connections && entity.connections.length > 0) {
+            fields.push({ label: 'Total Connections', value: entity.connections.length });
+        }
+        
+        // Timestamps and metadata
+        if (entity.created) fields.push({ label: 'Created', value: new Date(entity.created).toLocaleString() });
+        if (entity.updated) fields.push({ label: 'Updated', value: new Date(entity.updated).toLocaleString() });
+        if (entity.lastModified) fields.push({ label: 'Last Modified', value: new Date(entity.lastModified).toLocaleString() });
+        
+        // Any other fields that might exist
+        Object.keys(entity).forEach(key => {
+            // Skip fields we've already handled or internal fields
+            const skipFields = [
+                'id', 'firestoreId', 'name', 'description', 'type', 'category', 'wikidata_id',
+                'aliases', 'occupation', 'jobTitle', 'currentEmployer', 'previousEmployers', 
+                'organization', 'educatedAt', 'currentResidence', 'previousResidences',
+                'dateOfBirth', 'gender', 'expertise', 'industry', 'founded', 'employees',
+                'location', 'country', 'state', 'population', 'coordinates', 'connections',
+                'created', 'updated', 'lastModified'
+            ];
+            
+            if (!skipFields.includes(key) && entity[key] !== null && entity[key] !== undefined && entity[key] !== '') {
+                const formattedValue = formatValue(entity[key]);
+                if (formattedValue) {
+                    // Convert camelCase to readable label
+                    const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                    fields.push({ label, value: formattedValue });
+                }
+            }
+        });
+        
+        return fields;
     }
 
     renderConnections() {
@@ -367,111 +473,127 @@ class EntityProfile {
             .attr('width', width)
             .attr('height', height);
         
-        // Prepare data for network graph
-        const nodes = [this.currentEntity];
+        // Create zoom behavior
+        const zoom = d3.zoom()
+            .scaleExtent([0.1, 10])
+            .on('zoom', (event) => {
+                zoomGroup.attr('transform', event.transform);
+            });
+        
+        // Apply zoom to SVG
+        svg.call(zoom);
+        
+        // Create a group for all zoomable content
+        const zoomGroup = svg.append('g');
+        
+        // Prepare data for enhanced network graph
+        const nodes = [];
         const links = [];
+        const processedEntities = new Set();
         
-        // Add connected entities based on events
-        const connectedEntities = new Set();
+        // Add the center entity
+        const centerEntity = { ...this.currentEntity, isCenter: true, degree: 0 };
+        nodes.push(centerEntity);
+        processedEntities.add(centerEntity.id);
         
-        // Find events where this entity is involved
-        const relatedEvents = this.allEvents.filter(event => 
-            event.actor.includes(this.currentEntity.name) || 
-            event.target.includes(this.currentEntity.name) ||
-            (Array.isArray(event.locations) 
-                ? event.locations.some(loc => (typeof loc === 'string' ? loc : loc.name) === this.currentEntity.name)
-                : event.locations && event.locations.includes(this.currentEntity.name))
-        );
+        console.log('Building network graph for:', centerEntity.name);
         
-        console.log('Related events for network graph:', relatedEvents.length);
-        console.log('Current entity name:', this.currentEntity.name);
+        // Find first-degree connections (direct connections to center entity)
+        const firstDegreeConnections = this.getEntityConnections(centerEntity);
         
-        // For each related event, find other entities involved
-        relatedEvents.forEach(event => {
-            const actors = event.actor.split(',').map(a => a.trim());
-            const targets = event.target.split(',').map(t => t.trim());
-            const locations = Array.isArray(event.locations) 
-                ? event.locations.map(loc => typeof loc === 'string' ? loc : loc.name)
-                : (event.locations ? event.locations.split(',').map(l => l.trim()) : []);
-            
-            // Combine all entities from this event
-            const allEventEntities = [...actors, ...targets, ...locations];
-            
-            allEventEntities.forEach(entityName => {
-                if (entityName !== this.currentEntity.name) {
-                    const relatedEntity = this.findEntityByName(entityName);
-                    console.log(`Looking for entity: ${entityName}, found:`, relatedEntity ? relatedEntity.name : 'not found');
-                    if (relatedEntity && !connectedEntities.has(relatedEntity.id)) {
-                        connectedEntities.add(relatedEntity.id);
-                        nodes.push(relatedEntity);
+        firstDegreeConnections.forEach(connection => {
+            if (!processedEntities.has(connection.entity.id)) {
+                const firstDegreeNode = { ...connection.entity, isCenter: false, degree: 1 };
+                nodes.push(firstDegreeNode);
+                processedEntities.add(connection.entity.id);
+                
+                // Add link from center to first-degree entity
+                links.push({
+                    source: centerEntity.id,
+                    target: connection.entity.id,
+                    relationshipType: connection.relationshipType,
+                    isDirect: connection.isDirect,
+                    action: connection.action,
+                    events: connection.events
+                });
+                
+                // Find second-degree connections (entities connected to first-degree entities)
+                const secondDegreeConnections = this.getEntityConnections(connection.entity);
+                
+                secondDegreeConnections.forEach(secondConnection => {
+                    // Only add if not already processed and not the center entity
+                    if (!processedEntities.has(secondConnection.entity.id) && 
+                        secondConnection.entity.id !== centerEntity.id) {
                         
-                        // Determine relationship type
-                        let relationshipType = 'connected to';
-                        if (actors.includes(this.currentEntity.name) && targets.includes(entityName)) {
-                            relationshipType = event.action;
-                        } else if (targets.includes(this.currentEntity.name) && actors.includes(entityName)) {
-                            relationshipType = 'target of';
-                        } else if (locations.includes(entityName)) {
-                            relationshipType = 'located at';
-                        }
+                        const secondDegreeNode = { ...secondConnection.entity, isCenter: false, degree: 2 };
+                        nodes.push(secondDegreeNode);
+                        processedEntities.add(secondConnection.entity.id);
                         
+                        // Add link from first-degree to second-degree entity
                         links.push({
-                            source: this.currentEntity,
-                            target: relatedEntity,
-                            type: relationshipType,
-                            action: event.action,
-                            eventId: event.id
+                            source: connection.entity.id,
+                            target: secondConnection.entity.id,
+                            relationshipType: secondConnection.relationshipType,
+                            isDirect: secondConnection.isDirect,
+                            action: secondConnection.action,
+                            events: secondConnection.events
                         });
                     }
-                }
-            });
+                });
+            }
         });
         
-        // Remove duplicates
-        const uniqueNodes = nodes.filter((node, index, self) => 
-            index === self.findIndex(n => n.id === node.id)
-        );
+        console.log(`Network graph: ${nodes.length} nodes, ${links.length} links`);
+        console.log('Degree distribution:', {
+            center: nodes.filter(n => n.degree === 0).length,
+            firstDegree: nodes.filter(n => n.degree === 1).length,
+            secondDegree: nodes.filter(n => n.degree === 2).length
+        });
         
-        // Create force simulation
-        const simulation = d3.forceSimulation(uniqueNodes)
-            .force('link', d3.forceLink(links).id(d => d.id).distance(100))
-            .force('charge', d3.forceManyBody().strength(-300))
-            .force('center', d3.forceCenter(width / 2, height / 2));
+        // Create force simulation with different forces for different degrees
+        const simulation = d3.forceSimulation(nodes)
+            .force('link', d3.forceLink(links).id(d => d.id).distance(d => d.source.degree === 0 ? 120 : 80))
+            .force('charge', d3.forceManyBody().strength(d => d.degree === 0 ? -800 : d.degree === 1 ? -400 : -200))
+            .force('center', d3.forceCenter(width / 2, height / 2))
+            .force('collision', d3.forceCollide().radius(d => d.degree === 0 ? 20 : d.degree === 1 ? 15 : 10));
         
-        // Add links
-        const link = svg.append('g')
+        // Add links with color coding
+        const link = zoomGroup.append('g')
             .selectAll('line')
             .data(links)
             .enter().append('line')
-            .attr('stroke', '#999')
-            .attr('stroke-opacity', 0.6)
-            .attr('stroke-width', 2);
+            .attr('stroke', d => this.getLinkColor(d.relationshipType, d.isDirect))
+            .attr('stroke-opacity', 0.8)
+            .attr('stroke-width', d => d.isDirect ? 3 : 2)
+            .attr('stroke-dasharray', d => d.isDirect ? '0' : '5,5');
         
-        // Add nodes
-        const node = svg.append('g')
+        // Add nodes with different sizes for different degrees
+        const node = zoomGroup.append('g')
             .selectAll('circle')
-            .data(uniqueNodes)
+            .data(nodes)
             .enter().append('circle')
-            .attr('r', d => d.id === this.currentEntity.id ? 12 : 8)
+            .attr('r', d => d.degree === 0 ? 16 : d.degree === 1 ? 10 : 7)
             .attr('fill', d => this.getNodeColor(d.type))
-            .attr('stroke', '#fff')
-            .attr('stroke-width', 2)
+            .attr('stroke', d => d.degree === 0 ? '#333' : '#fff')
+            .attr('stroke-width', d => d.degree === 0 ? 2 : 2)
+            .attr('opacity', d => d.degree === 2 ? 0.7 : 1)
             .call(d3.drag()
                 .on('start', dragstarted)
                 .on('drag', dragged)
                 .on('end', dragended));
         
-        // Add labels
-        const label = svg.append('g')
+        // Add labels with different styling for different degrees
+        const label = zoomGroup.append('g')
             .selectAll('text')
-            .data(uniqueNodes)
+            .data(nodes)
             .enter().append('text')
-            .text(d => d.name)
-            .attr('font-size', '12px')
+            .text(d => d.name.length > 12 ? d.name.substring(0, 12) + '...' : d.name)
+            .attr('font-size', d => d.degree === 0 ? '14px' : d.degree === 1 ? '12px' : '10px')
             .attr('font-family', 'SF Pro Display, sans-serif')
-            .attr('fill', '#333')
+            .attr('font-weight', d => d.degree === 0 ? 'bold' : 'normal')
+            .attr('fill', d => d.degree === 0 ? '#2c3e50' : '#333')
             .attr('text-anchor', 'middle')
-            .attr('dy', -15);
+            .attr('dy', d => d.degree === 0 ? -20 : d.degree === 1 ? -15 : -12);
         
         // Update positions on simulation tick
         simulation.on('tick', () => {
@@ -490,7 +612,7 @@ class EntityProfile {
                 .attr('y', d => d.y);
         });
         
-        // Drag functions
+        // Drag functions that work with zoom
         function dragstarted(event, d) {
             if (!event.active) simulation.alphaTarget(0.3).restart();
             d.fx = d.x;
@@ -508,17 +630,229 @@ class EntityProfile {
             d.fy = null;
         }
         
-        // Add tooltips
-        node.append('title').text(d => `${d.name} (${d.type})`);
+        // Enhanced tooltips
+        node.append('title').text(d => {
+            const degreeText = d.degree === 0 ? 'Center Entity' : 
+                             d.degree === 1 ? 'Direct Connection' : 
+                             'Second Degree Connection';
+            return `${d.name} (${d.type})\n${degreeText}`;
+        });
         
-        this.networkGraph = { svg, simulation };
+        // Link tooltips
+        link.append('title').text(d => {
+            const relationshipText = d.isDirect ? 
+                `Direct relationship: ${d.relationshipType}` : 
+                `Neutral connection: ${d.relationshipType}`;
+            return relationshipText;
+        });
+        
+        // Store references for later use
+        this.networkGraph = { svg, simulation, zoom, zoomGroup };
+        
+        // Add zoom controls
+        this.addZoomControls(container, zoom, svg);
+    }
+
+    addZoomControls(container, zoom, svg) {
+        // Create zoom controls container
+        const controlsDiv = document.createElement('div');
+        controlsDiv.className = 'network-zoom-controls';
+        controlsDiv.innerHTML = `
+            <button class="zoom-btn" id="profileZoomIn" title="Zoom In">+</button>
+            <button class="zoom-btn" id="profileZoomOut" title="Zoom Out">−</button>
+            <button class="zoom-btn" id="profileZoomReset" title="Reset Zoom">⌂</button>
+            <button class="zoom-btn" id="profileZoomFit" title="Fit to Screen">⊡</button>
+        `;
+        
+        // Position controls in top-right corner
+        controlsDiv.style.position = 'absolute';
+        controlsDiv.style.top = '10px';
+        controlsDiv.style.right = '10px';
+        controlsDiv.style.zIndex = '1000';
+        controlsDiv.style.display = 'flex';
+        controlsDiv.style.flexDirection = 'column';
+        controlsDiv.style.gap = '5px';
+        
+        // Add to container (make container relative if not already)
+        container.style.position = 'relative';
+        container.appendChild(controlsDiv);
+        
+        // Add event listeners
+        document.getElementById('profileZoomIn').addEventListener('click', () => {
+            svg.transition().duration(300).call(zoom.scaleBy, 1.5);
+        });
+        
+        document.getElementById('profileZoomOut').addEventListener('click', () => {
+            svg.transition().duration(300).call(zoom.scaleBy, 1 / 1.5);
+        });
+        
+        document.getElementById('profileZoomReset').addEventListener('click', () => {
+            svg.transition().duration(500).call(
+                zoom.transform,
+                d3.zoomIdentity.translate(0, 0).scale(1)
+            );
+        });
+        
+        document.getElementById('profileZoomFit').addEventListener('click', () => {
+            this.zoomToFitNodes(svg, zoom);
+        });
+    }
+
+    zoomToFitNodes(svg, zoom) {
+        if (!this.networkGraph || !this.networkGraph.zoomGroup) return;
+        
+        try {
+            const bounds = this.networkGraph.zoomGroup.node().getBBox();
+            const fullWidth = svg.node().clientWidth || 800;
+            const fullHeight = svg.node().clientHeight || 400;
+            const width = bounds.width;
+            const height = bounds.height;
+            const midX = bounds.x + width / 2;
+            const midY = bounds.y + height / 2;
+
+            if (width === 0 || height === 0) return;
+
+            const scale = Math.min(fullWidth / width, fullHeight / height) * 0.8;
+            const translate = [fullWidth / 2 - scale * midX, fullHeight / 2 - scale * midY];
+
+            svg.transition().duration(750).call(
+                zoom.transform,
+                d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale)
+            );
+        } catch (error) {
+            console.warn('Could not fit nodes to screen:', error);
+        }
+    }
+
+    getEntityConnections(entity) {
+        const connections = [];
+        
+        // Find all events where this entity is involved
+        const relatedEvents = this.allEvents.filter(event => 
+            event.actor.includes(entity.name) || 
+            event.target.includes(entity.name) ||
+            (Array.isArray(event.locations) 
+                ? event.locations.some(loc => (typeof loc === 'string' ? loc : loc.name) === entity.name)
+                : event.locations && event.locations.includes(entity.name))
+        );
+        
+        relatedEvents.forEach(event => {
+            const actors = event.actor.split(',').map(a => a.trim());
+            const targets = event.target.split(',').map(t => t.trim());
+            const locations = Array.isArray(event.locations) 
+                ? event.locations.map(loc => typeof loc === 'string' ? loc : loc.name)
+                : (event.locations ? event.locations.split(',').map(l => l.trim()) : []);
+            
+            // Check all entities in this event
+            [...actors, ...targets, ...locations].forEach(entityName => {
+                if (entityName !== entity.name) {
+                    const relatedEntity = this.findEntityByName(entityName);
+                    if (relatedEntity) {
+                        // Determine relationship type and if it's direct
+                        let relationshipType = 'connected';
+                        let isDirect = false;
+                        
+                        if (actors.includes(entity.name) && targets.includes(entityName)) {
+                            // Entity is actor, other is target - direct relationship
+                            relationshipType = event.action;
+                            isDirect = true;
+                        } else if (targets.includes(entity.name) && actors.includes(entityName)) {
+                            // Entity is target, other is actor - direct relationship
+                            relationshipType = `target of ${event.action}`;
+                            isDirect = true;
+                        } else if (locations.includes(entityName)) {
+                            // Other entity is a location - neutral relationship
+                            relationshipType = 'located at';
+                            isDirect = false;
+                        } else if (locations.includes(entity.name)) {
+                            // Current entity is a location - neutral relationship
+                            relationshipType = 'location of';
+                            isDirect = false;
+                        } else {
+                            // Both are actors or both are targets - neutral relationship
+                            relationshipType = 'co-involved in';
+                            isDirect = false;
+                        }
+                        
+                        // Check if this connection already exists
+                        const existingConnection = connections.find(c => c.entity.id === relatedEntity.id);
+                        if (existingConnection) {
+                            // Strengthen existing connection
+                            existingConnection.events.push(event);
+                            // If any relationship is direct, mark the connection as direct
+                            if (isDirect) {
+                                existingConnection.isDirect = true;
+                                existingConnection.relationshipType = relationshipType;
+                            }
+                        } else {
+                            connections.push({
+                                entity: relatedEntity,
+                                relationshipType,
+                                isDirect,
+                                action: event.action,
+                                events: [event]
+                            });
+                        }
+                    }
+                }
+            });
+        });
+        
+        return connections;
+    }
+
+    getLinkColor(relationshipType, isDirect) {
+        if (isDirect) {
+            // Direct relationships - stronger colors
+            if (relationshipType.includes('target of')) {
+                return '#e74c3c'; // Red for being targeted
+            } else {
+                return '#2980b9'; // Blue for acting upon
+            }
+        } else {
+            // Neutral relationships - muted colors
+            return '#95a5a6'; // Gray for neutral connections
+        }
+    }
+
+    hideNetworkGraphAndMap() {
+        // Hide network graph section
+        const networkSection = document.querySelector('.content-section:has(#networkGraph)');
+        if (networkSection) {
+            networkSection.style.display = 'none';
+        }
+        
+        // Hide map section
+        const mapSection = document.querySelector('.content-section:has(#map)');
+        if (mapSection) {
+            mapSection.style.display = 'none';
+        }
+        
+        // Show a message for unknown entities
+        const connectionsSection = document.querySelector('.content-section:has(#connectionsList)');
+        if (connectionsSection) {
+            const existingMessage = connectionsSection.querySelector('.unknown-entity-message');
+            if (!existingMessage) {
+                const message = document.createElement('div');
+                message.className = 'unknown-entity-message';
+                message.innerHTML = `
+                    <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; margin: 10px 0; text-align: center;">
+                        <h4 style="color: #6c757d; margin-bottom: 10px;">Unknown Entity</h4>
+                        <p style="color: #6c757d; margin: 0;">This entity type is not fully classified. Network graph and map are not available.</p>
+                        <p style="color: #6c757d; margin: 5px 0 0 0; font-size: 14px;">You can edit this entity to change its type if more information becomes available.</p>
+                    </div>
+                `;
+                connectionsSection.insertBefore(message, connectionsSection.firstChild.nextSibling);
+            }
+        }
     }
 
     getNodeColor(type) {
         const colors = {
             person: '#e74c3c',
             organization: '#3498db',
-            place: '#27ae60'
+            place: '#27ae60',
+            unknown: '#95a5a6'
         };
         return colors[type] || '#95a5a6';
     }
@@ -775,22 +1109,90 @@ class EntityProfile {
                 }
             }
             
-            // Update in Firebase
-            const entityRef = doc(db, this.entityType, this.currentEntity.firestoreId);
-            await updateDoc(entityRef, updatedEntity);
+            // Check if entity type has changed
+            const originalType = this.currentEntity.type;
+            const newType = updatedEntity.type;
+            const typeChanged = originalType !== newType;
+            
+            if (typeChanged) {
+                console.log(`Entity type changed from ${originalType} to ${newType}, moving between collections`);
+                
+                // Delete from old collection
+                const oldEntityRef = doc(db, this.entityType, this.currentEntity.firestoreId);
+                await deleteDoc(oldEntityRef);
+                console.log(`Deleted entity from ${this.entityType} collection`);
+                
+                // Determine new collection name
+                const newCollectionName = this.getCollectionNameForType(newType);
+                
+                // Create in new collection
+                const newEntityData = { ...updatedEntity };
+                delete newEntityData.firestoreId; // Remove old firestore ID
+                delete newEntityData.firestoreCollection;
+                
+                const newDocRef = await addDoc(collection(db, newCollectionName), newEntityData);
+                console.log(`Created entity in ${newCollectionName} collection with ID: ${newDocRef.id}`);
+                
+                // Update entity with new firestore info
+                updatedEntity.firestoreId = newDocRef.id;
+                updatedEntity.firestoreCollection = newCollectionName;
+                
+                // Update the current entityType for future operations
+                this.entityType = newCollectionName;
+            } else {
+                // Type hasn't changed, just update in place
+                const entityRef = doc(db, this.entityType, this.currentEntity.firestoreId);
+                const updateData = { ...updatedEntity };
+                delete updateData.firestoreId;
+                delete updateData.firestoreCollection;
+                await updateDoc(entityRef, updateData);
+                console.log(`Updated entity in ${this.entityType} collection`);
+            }
             
             // Update local data
             this.currentEntity = updatedEntity;
             
             // Refresh the display
             this.renderEntityProfile();
+            
+            // If type changed, we need to refresh the entire profile view
+            if (typeChanged) {
+                // Re-initialize network graph and map based on new type
+                if (updatedEntity.type !== 'unknown') {
+                    this.initializeNetworkGraph();
+                    this.initializeMap();
+                } else {
+                    this.hideNetworkGraphAndMap();
+                }
+            }
+            
             this.hideEditModal();
             
-            this.showSuccess('Entity updated successfully!');
+            if (typeChanged) {
+                this.showSuccess(`Entity updated and moved to ${newType} collection successfully!`);
+            } else {
+                this.showSuccess('Entity updated successfully!');
+            }
             
         } catch (error) {
             console.error('Error saving entity:', error);
             this.showError('Failed to save entity changes');
+        }
+    }
+
+    getCollectionNameForType(entityType) {
+        // Map entity types to their Firebase collection names
+        switch (entityType) {
+            case 'person':
+                return 'people';
+            case 'organization':
+                return 'organizations';
+            case 'place':
+                return 'places';
+            case 'unknown':
+                return 'unknown';
+            default:
+                return 'unknown'; // fallback to unknown for unrecognized types
         }
     }
 
@@ -1107,152 +1509,7 @@ class EntityProfile {
         }
     }
 
-    showMergeModal() {
-        document.getElementById('mergeModal').style.display = 'block';
-    }
 
-    hideMergeModal() {
-        document.getElementById('mergeModal').style.display = 'none';
-        this.resetMergeModal();
-    }
-
-    resetMergeModal() {
-        // Reset form fields
-        document.getElementById('mergeSearch').value = '';
-        document.getElementById('newWikidataId').value = '';
-        document.getElementById('mergeSearchResults').innerHTML = '';
-        
-        // Hide and reset preview
-        const previewDiv = document.getElementById('wikidataPreview');
-        previewDiv.classList.add('hidden');
-        previewDiv.innerHTML = '';
-        
-        // Reset fetch button
-        const fetchBtn = document.getElementById('fetchWikidataBtn');
-        fetchBtn.textContent = 'Fetch Wikidata Info';
-        fetchBtn.disabled = false;
-        fetchBtn.onclick = () => this.fetchWikidataInfo();
-        
-        // Clear pending update
-        this.pendingWikidataUpdate = null;
-    }
-
-    async performMerge() {
-        // Implementation for merging entities
-        console.log('Merge functionality to be implemented');
-        this.hideMergeModal();
-    }
-
-    async fetchWikidataInfo() {
-        const wikidataId = document.getElementById('newWikidataId').value.trim();
-        
-        if (!wikidataId) {
-            this.showError('Please enter a Wikidata ID');
-            return;
-        }
-        
-        if (!wikidataId.match(/^Q\d+$/)) {
-            this.showError('Wikidata ID must be in format Q123456');
-            return;
-        }
-        
-        try {
-            // Show loading state
-            const fetchBtn = document.getElementById('fetchWikidataBtn');
-            const originalText = fetchBtn.textContent;
-            fetchBtn.textContent = 'Fetching...';
-            fetchBtn.disabled = true;
-            
-            // Fetch the new Wikidata entity
-            const response = await fetch(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${wikidataId}&format=json&origin=*`);
-            const data = await response.json();
-            
-            if (!data.entities || !data.entities[wikidataId]) {
-                this.showError('Wikidata entity not found');
-                fetchBtn.textContent = originalText;
-                fetchBtn.disabled = false;
-                return;
-            }
-            
-            const wikidataEntity = data.entities[wikidataId];
-            
-            // Parse the Wikidata entity to get structured data
-            const parsedData = await this.parseWikidataEntityForUpdate(wikidataEntity);
-            
-            // Show preview of what will change
-            this.showWikidataPreview(parsedData);
-            
-            // Store the parsed data for later use
-            this.pendingWikidataUpdate = parsedData;
-            
-            // Update button text
-            fetchBtn.textContent = 'Apply Changes';
-            fetchBtn.onclick = () => this.applyWikidataChanges();
-            fetchBtn.disabled = false;
-            
-        } catch (error) {
-            console.error('Error fetching Wikidata info:', error);
-            this.showError('Failed to fetch Wikidata information');
-            
-            const fetchBtn = document.getElementById('fetchWikidataBtn');
-            fetchBtn.textContent = 'Fetch Wikidata Info';
-            fetchBtn.disabled = false;
-        }
-    }
-
-    showWikidataPreview(parsedData) {
-        const previewDiv = document.getElementById('wikidataPreview');
-        previewDiv.classList.remove('hidden');
-        
-        const currentType = this.currentEntity.type || this.currentEntity.category;
-        const newType = parsedData.type;
-        const typeChanged = currentType !== newType;
-        
-        previewDiv.innerHTML = `
-            <div class="preview-title">${parsedData.name}</div>
-            <div class="preview-description">${parsedData.description || 'No description available'}</div>
-            <div class="preview-details">
-                <strong>Type:</strong> ${parsedData.type} ${typeChanged ? `(was: ${currentType})` : ''}<br>
-                <strong>Wikidata ID:</strong> ${parsedData.wikidata_id}<br>
-                ${parsedData.aliases && parsedData.aliases.length > 0 ? `<strong>Aliases:</strong> ${parsedData.aliases.join(', ')}<br>` : ''}
-                ${parsedData.coordinates ? `<strong>Coordinates:</strong> ${parsedData.coordinates.lat}, ${parsedData.coordinates.lng}<br>` : ''}
-                ${parsedData.occupation ? `<strong>Occupation:</strong> ${parsedData.occupation}<br>` : ''}
-                ${parsedData.country ? `<strong>Country:</strong> ${parsedData.country}<br>` : ''}
-                ${parsedData.population ? `<strong>Population:</strong> ${parsedData.population.toLocaleString()}<br>` : ''}
-            </div>
-            ${typeChanged ? '<div class="preview-warning">⚠️ This will change the entity type and may move it to a different collection in your knowledge base.</div>' : ''}
-            <div style="margin-top: 10px; font-size: 0.9rem; color: #6c757d;">
-                <strong>Note:</strong> All existing connections and events will be preserved.
-            </div>
-        `;
-    }
-
-    async applyWikidataChanges() {
-        if (!this.pendingWikidataUpdate) {
-            this.showError('No Wikidata changes to apply');
-            return;
-        }
-        
-        try {
-            this.showStatus('Updating entity with Wikidata information...', 'info');
-            
-            // Update the current entity with new Wikidata information
-            await this.updateEntityWithWikidata(this.pendingWikidataUpdate);
-            
-            this.showSuccess('Entity updated with new Wikidata information!');
-            this.hideMergeModal();
-            
-            // Refresh the profile display
-            this.renderEntityProfile();
-            
-            // Clear pending update
-            this.pendingWikidataUpdate = null;
-            
-        } catch (error) {
-            console.error('Error applying Wikidata changes:', error);
-            this.showError('Failed to update entity');
-        }
-    }
 
 
     exportEntityData() {

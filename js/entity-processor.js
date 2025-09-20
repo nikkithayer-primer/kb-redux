@@ -9,6 +9,7 @@ export class EntityProcessor {
             people: [],
             organizations: [],
             places: [],
+            unknown: [],
             events: []
         };
     }
@@ -150,7 +151,8 @@ export class EntityProcessor {
         const allEntities = [
             ...this.processedEntities.people,
             ...this.processedEntities.organizations,
-            ...this.processedEntities.places
+            ...this.processedEntities.places,
+            ...this.processedEntities.unknown
         ];
         
         // Simple name matching for speed
@@ -175,8 +177,10 @@ export class EntityProcessor {
             targetList = this.processedEntities.people;
         } else if (entityType === 'organization') {
             targetList = this.processedEntities.organizations;
-        } else {
+        } else if (entityType === 'place') {
             targetList = this.processedEntities.places;
+        } else {
+            targetList = this.processedEntities.unknown;
         }
         
         // Check if entity already exists in the list
@@ -289,12 +293,14 @@ export class EntityProcessor {
         if (role === 'actor' || role === 'target') {
             if (this.isPerson(name, wikidataInfo)) return 'person';
             if (this.isOrganization(name, wikidataInfo)) return 'organization';
+            if (this.isPlace(name, wikidataInfo)) return 'place';
         }
         
         // Default logic
         if (this.isPerson(name, wikidataInfo)) return 'person';
         if (this.isOrganization(name, wikidataInfo)) return 'organization';
-        return 'place';
+        if (this.isPlace(name, wikidataInfo)) return 'place';
+        return 'unknown';
     }
 
     isPerson(name, wikidataInfo) {
@@ -326,6 +332,32 @@ export class EntityProcessor {
         const orgKeywords = ['corp', 'inc', 'llc', 'ltd', 'company', 'corporation', 'institute', 'university', 'college'];
         const nameLower = name.toLowerCase();
         return orgKeywords.some(keyword => nameLower.includes(keyword));
+    }
+
+    isPlace(name, wikidataInfo) {
+        if (wikidataInfo?.instance_of) {
+            const instance = wikidataInfo.instance_of.toLowerCase();
+            if (instance.includes('city') || instance.includes('country') || 
+                instance.includes('state') || instance.includes('province') ||
+                instance.includes('region') || instance.includes('territory') ||
+                instance.includes('municipality') || instance.includes('district') ||
+                instance.includes('location') || instance.includes('place')) {
+                return true;
+            }
+        }
+        
+        // Check if it has coordinates (strong indicator of a place)
+        if (wikidataInfo?.coordinates) {
+            return true;
+        }
+        
+        // Name-based heuristics for places
+        const placeKeywords = ['city', 'town', 'village', 'county', 'state', 'province', 
+                              'country', 'region', 'district', 'territory', 'island',
+                              'mountain', 'river', 'lake', 'ocean', 'sea', 'bay', 'valley'];
+        
+        const nameLower = name.toLowerCase();
+        return placeKeywords.some(keyword => nameLower.includes(keyword));
     }
 
     classifyLocation(locationName, wikidataInfo) {

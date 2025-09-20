@@ -9,8 +9,14 @@ export class TableManager {
     }
 
     initializeEventListeners() {
-        // Filter and search controls
-        document.getElementById('typeFilter').addEventListener('change', () => this.filterEntities());
+        // Filter toggle controls
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('filter-toggle')) {
+                this.handleFilterToggle(e.target);
+            }
+        });
+        
+        // Search control
         document.getElementById('entitySearch').addEventListener('input', () => this.filterEntities());
         
         // Table sorting
@@ -29,7 +35,8 @@ export class TableManager {
         this.allEntities = [
             ...processedEntities.people.map(e => ({...e, category: 'person'})),
             ...processedEntities.organizations.map(e => ({...e, category: 'organization'})),
-            ...processedEntities.places.map(e => ({...e, category: 'place'}))
+            ...processedEntities.places.map(e => ({...e, category: 'place'})),
+            ...processedEntities.unknown.map(e => ({...e, category: 'unknown'}))
         ].map(entity => {
             // Calculate real connection count from events
             const connectionCount = this.calculateConnectionCount(entity, events);
@@ -60,8 +67,22 @@ export class TableManager {
         }).length;
     }
 
+    handleFilterToggle(clickedToggle) {
+        // Remove active class from all toggles
+        document.querySelectorAll('.filter-toggle').forEach(toggle => {
+            toggle.classList.remove('active');
+        });
+        
+        // Add active class to clicked toggle
+        clickedToggle.classList.add('active');
+        
+        // Trigger filtering
+        this.filterEntities();
+    }
+
     filterEntities() {
-        const typeFilter = document.getElementById('typeFilter').value;
+        const activeToggle = document.querySelector('.filter-toggle.active');
+        const typeFilter = activeToggle ? activeToggle.dataset.type : '';
         const searchTerm = document.getElementById('entitySearch').value.toLowerCase();
         
         // Get all entities if not already loaded
@@ -201,6 +222,8 @@ export class TableManager {
                 return 'organizations';
             case 'place':
                 return 'places';
+            case 'unknown':
+                return 'unknown';
             default:
                 return entityType + 's'; // fallback
         }

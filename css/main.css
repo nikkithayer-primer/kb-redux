@@ -274,7 +274,7 @@ input[type="file"] {
 /* Stats Grid */
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: var(--spacing-lg);
     margin-bottom: var(--spacing-3xl);
 }
@@ -288,9 +288,8 @@ input[type="file"] {
 }
 
 .stat-number {
-    font-size: 2rem;
+    font-size: var(--font-xl);
     font-weight: var(--font-bold);
-    color: var(--primary-color);
     margin-bottom: var(--spacing-xs);
 }
 

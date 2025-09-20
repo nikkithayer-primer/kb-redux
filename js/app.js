@@ -1,6 +1,6 @@
 // Main application entry point with modular architecture
 
-import { KnowledgeBaseApp } from './js/knowledge-base-app.js';
+import { KnowledgeBaseApp } from './knowledge-base-app.js';
 
 // Initialize the application when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {

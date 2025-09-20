@@ -163,11 +163,12 @@ export class FirebaseService {
 
     async loadExistingData() {
         try {
-            const collections = ['people', 'organizations', 'places', 'events'];
+            const collections = ['people', 'organizations', 'places', 'unknown', 'events'];
             const data = {
                 people: [],
                 organizations: [],
                 places: [],
+                unknown: [],
                 events: []
             };
 

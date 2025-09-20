@@ -31,10 +31,6 @@
             
             <div id="statusMessage"></div>
             
-            <div id="processingControls" class="hidden">
-                <button class="btn" id="processBtn">Process Data</button>
-                <button class="btn btn-secondary" id="clearBtn">Clear</button>
-            </div>
         </section>
 
         <section class="knowledge-base-section">
@@ -53,6 +49,10 @@
                     <div class="stat-label">Places</div>
                 </div>
                 <div class="stat-card">
+                    <div class="stat-number" id="unknownCount">0</div>
+                    <div class="stat-label">Unknown</div>
+                </div>
+                <div class="stat-card">
                     <div class="stat-number" id="eventsCount">0</div>
                     <div class="stat-label">Events</div>
                 </div>
@@ -65,13 +65,14 @@
             <!-- Filter and Search Controls -->
             <div class="table-controls">
                 <div class="filter-group">
-                    <label for="typeFilter">Filter by Type:</label>
-                    <select id="typeFilter" class="form-select">
-                        <option value="">All Types</option>
-                        <option value="person">People</option>
-                        <option value="organization">Organizations</option>
-                        <option value="place">Places</option>
-                    </select>
+                    <label>Filter by Type:</label>
+                    <div class="filter-toggles">
+                        <button class="filter-toggle active" data-type="">All Types</button>
+                        <button class="filter-toggle" data-type="person">People</button>
+                        <button class="filter-toggle" data-type="organization">Organizations</button>
+                        <button class="filter-toggle" data-type="place">Places</button>
+                        <button class="filter-toggle" data-type="unknown">Unknown</button>
+                    </div>
                 </div>
                 
                 <div class="search-group">
@@ -108,15 +109,16 @@
             <button class="back-btn" id="backToMainBtn">← Back to Knowledge Base</button>
             <div>
                 <button class="btn btn-secondary" id="editBtn">Edit Entity</button>
-                <button class="btn btn-warning" id="mergeBtn">Merge/Change Wikidata</button>
             </div>
         </header>
 
         <div class="profile-header">
             <div class="entity-info">
                 <div class="entity-details">
-                    <h1 id="entityName">Loading...</h1>
-                    <div class="entity-type" id="entityType">entity</div>
+                    <div class="entity-header">
+                        <h1 id="entityName">Loading...</h1>
+                        <div class="entity-type" id="entityType">entity</div>
+                    </div>
                     <div class="entity-description" id="entityDescription">Loading entity information...</div>
                     
                     <div class="entity-meta" id="entityMeta">
@@ -133,7 +135,23 @@
         <div class="content-grid">
             <div class="content-section">
                 <h2 class="section-title">Connection Network</h2>
-                <div id="networkGraph"></div>
+                <div class="network-container" style="position: relative;">
+                    <div id="networkGraph"></div>
+                    <div class="network-legend">
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #2980b9;"></div>
+                            <span>Direct Action</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #e74c3c;"></div>
+                            <span>Target of Action</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #95a5a6; border: 1px dashed #666;"></div>
+                            <span>Neutral Connection</span>
+                        </div>
+                    </div>
+                </div>
             </div>
             
             <div class="content-section">
@@ -157,35 +175,6 @@
         </div>
     </div>
 
-    <!-- Merge Modal -->
-    <div class="modal" id="mergeModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title">Merge Entities</h3>
-                <button class="close-btn" id="closeMergeModal">&times;</button>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Search for entity to merge with:</label>
-                <input type="text" class="form-input" id="mergeSearch" placeholder="Search existing entities...">
-                <div class="search-results" id="mergeSearchResults"></div>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Or change Wikidata ID:</label>
-                <input type="text" class="form-input" id="newWikidataId" placeholder="Q123456">
-                <button class="btn btn-secondary" id="fetchWikidataBtn">Fetch Wikidata Info</button>
-                <div id="wikidataPreview" class="wikidata-preview hidden">
-                    <!-- Preview will be populated here -->
-                </div>
-            </div>
-                        
-            <div class="form-actions">
-                <button class="btn btn-secondary" id="cancelMergeBtn">Cancel</button>
-                <button class="btn" id="confirmMergeBtn">Apply Changes</button>
-            </div>
-        </div>
-    </div>
 
     <!-- Edit Modal -->
     <div class="modal" id="editModal">
@@ -212,6 +201,7 @@
                         <option value="person">Person</option>
                         <option value="organization">Organization</option>
                         <option value="place">Place</option>
+                        <option value="unknown">Unknown</option>
                     </select>
                 </div>
                 
@@ -247,6 +237,6 @@
     <script src="https://d3js.org/d3.v7.min.js"></script>
     
     <!-- Application Scripts -->
-    <script type="module" src="app.js"></script>
+    <script type="module" src="js/app.js"></script>
 </body>
 </html>

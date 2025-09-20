@@ -8,7 +8,11 @@ export class WikidataService {
     async searchWikidata(entityName) {
         console.log('WikidataService: Searching for', entityName);
         
-        // Check cache first
+        // Clean the entity name before searching
+        const cleanedName = this.cleanEntityName(entityName);
+        console.log('WikidataService: Cleaned name:', cleanedName);
+        
+        // Check cache first (using original name as key)
         if (this.cache.has(entityName)) {
             console.log('WikidataService: Found in cache');
             return this.cache.get(entityName);
@@ -16,8 +20,8 @@ export class WikidataService {
 
         try {
             // Single search query - no variations for speed
-            console.log('WikidataService: Searching for:', entityName);
-            const searchUrl = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(entityName)}&language=en&format=json&origin=*&limit=5`;
+            console.log('WikidataService: Searching for:', cleanedName);
+            const searchUrl = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(cleanedName)}&language=en&format=json&origin=*&limit=5`;
             
             // Add timeout to prevent hanging
             const controller = new AbortController();
@@ -69,6 +73,31 @@ export class WikidataService {
         console.log('WikidataService: No results found for', entityName);
         this.cache.set(entityName, null);
         return null;
+    }
+
+    cleanEntityName(entityName) {
+        if (!entityName || typeof entityName !== 'string') {
+            return entityName;
+        }
+        
+        let cleaned = entityName.trim();
+        
+        // Remove leading articles (case-insensitive)
+        const articlesToRemove = ['the ', 'a ', 'an '];
+        const lowerCleaned = cleaned.toLowerCase();
+        
+        for (const article of articlesToRemove) {
+            if (lowerCleaned.startsWith(article)) {
+                cleaned = cleaned.substring(article.length).trim();
+                break; // Only remove the first matching article
+            }
+        }
+        
+        // Additional cleaning: remove extra whitespace
+        cleaned = cleaned.replace(/\s+/g, ' ').trim();
+        
+        // Return original if cleaning resulted in empty string
+        return cleaned.length > 0 ? cleaned : entityName;
     }
 
     generateSearchVariations(query) {
