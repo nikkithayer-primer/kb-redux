@@ -32,8 +32,9 @@ class EntityProfile {
         };
 
         // Edit functionality
-        safeAddEventListener('editBtn', 'click', () => this.toggleEditMode());
-        safeAddEventListener('cancelEditBtn', 'click', () => this.toggleEditMode(false));
+        safeAddEventListener('editBtn', 'click', () => this.showEditModal());
+        safeAddEventListener('closeEditModal', 'click', () => this.hideEditModal());
+        safeAddEventListener('cancelEditBtn', 'click', () => this.hideEditModal());
         safeAddEventListener('entityForm', 'submit', (e) => this.saveEntity(e));
         
         // Wikidata search
@@ -48,7 +49,6 @@ class EntityProfile {
         safeAddEventListener('fetchWikidataBtn', 'click', () => this.fetchWikidataInfo());
         
         // Other actions
-        safeAddEventListener('viewConnectionsBtn', 'click', () => this.showAllConnections());
         safeAddEventListener('exportBtn', 'click', () => this.exportEntityData());
         
         // Entity type change handler
@@ -225,7 +225,7 @@ class EntityProfile {
             );
             
             // Determine relationship type
-            let relationshipType = 'connected to';
+            let relationshipType = 'Connected to:';
             let relatedEntityNames = otherEntities;
             
             if (actors.includes(this.currentEntity.name)) {
@@ -588,18 +588,30 @@ class EntityProfile {
         }
     }
 
-    toggleEditMode(show = true) {
-        const editForm = document.getElementById('editForm');
-        const profileHeader = document.querySelector('.profile-header');
+    showEditModal() {
+        this.populateEditForm();
+        const editModal = document.getElementById('editModal');
+        editModal.style.display = 'flex';
+    }
+
+    hideEditModal() {
+        const editModal = document.getElementById('editModal');
+        editModal.style.display = 'none';
+        this.resetEditForm();
+    }
+
+    resetEditForm() {
+        // Reset form fields
+        document.getElementById('editName').value = '';
+        document.getElementById('editAliases').value = '';
+        document.getElementById('editDescription').value = '';
+        document.getElementById('editWikidataId').value = '';
+        document.getElementById('wikidataSearch').value = '';
+        document.getElementById('searchResults').innerHTML = '';
         
-        if (show) {
-            this.populateEditForm();
-            editForm.style.display = 'block';
-            profileHeader.style.display = 'none';
-        } else {
-            editForm.style.display = 'none';
-            profileHeader.style.display = 'block';
-        }
+        // Clear additional fields
+        const additionalFields = document.getElementById('additionalFields');
+        additionalFields.innerHTML = '';
     }
 
     populateEditForm() {
@@ -714,7 +726,7 @@ class EntityProfile {
             
             // Refresh the display
             this.renderEntityProfile();
-            this.toggleEditMode(false);
+            this.hideEditModal();
             
             this.showSuccess('Entity updated successfully!');
             
@@ -1184,10 +1196,6 @@ class EntityProfile {
         }
     }
 
-    showAllConnections() {
-        // Implementation for showing all connections in a modal or separate view
-        console.log('Show all connections functionality to be implemented');
-    }
 
     exportEntityData() {
         const dataStr = JSON.stringify(this.currentEntity, null, 2);

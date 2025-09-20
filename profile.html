@@ -33,59 +33,11 @@
                 </div>
                 
                 <div class="entity-actions">
-                    <button class="btn" id="viewConnectionsBtn">View All Connections</button>
                     <button class="btn btn-secondary" id="exportBtn">Export Data</button>
                 </div>
             </div>
         </div>
 
-        <div class="edit-form" id="editForm">
-            <h2 class="section-title">Edit Entity</h2>
-            <form id="entityForm">
-                <div class="form-group">
-                    <label class="form-label" for="editName">Name</label>
-                    <input type="text" class="form-input" id="editName" required>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label" for="editAliases">Aliases (comma-separated)</label>
-                    <input type="text" class="form-input" id="editAliases">
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label" for="editType">Type</label>
-                    <select class="form-select" id="editType">
-                        <option value="person">Person</option>
-                        <option value="organization">Organization</option>
-                        <option value="place">Place</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label" for="editDescription">Description</label>
-                    <textarea class="form-textarea" id="editDescription"></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label" for="editWikidataId">Wikidata ID</label>
-                    <input type="text" class="form-input" id="editWikidataId" placeholder="Q123456">
-                    
-                    <div class="wikidata-search">
-                        <input type="text" class="form-input" id="wikidataSearch" placeholder="Search Wikidata...">
-                        <div class="search-results" id="searchResults"></div>
-                    </div>
-                </div>
-                
-                <div id="additionalFields">
-                    <!-- Additional fields based on entity type will be added here -->
-                </div>
-                
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" id="cancelEditBtn">Cancel</button>
-                    <button type="submit" class="btn">Save Changes</button>
-                </div>
-            </form>
-        </div>
 
         <div class="content-grid">
             <div class="content-section">
@@ -141,6 +93,61 @@
                 <button class="btn btn-secondary" id="cancelMergeBtn">Cancel</button>
                 <button class="btn" id="confirmMergeBtn">Apply Changes</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div class="modal" id="editModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Edit Entity</h3>
+                <button class="close-btn" id="closeEditModal">&times;</button>
+            </div>
+            
+            <form id="entityForm">
+                <div class="form-group">
+                    <label class="form-label" for="editName">Name</label>
+                    <input type="text" class="form-input" id="editName" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="editAliases">Aliases (comma-separated)</label>
+                    <input type="text" class="form-input" id="editAliases">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="editType">Type</label>
+                    <select class="form-select" id="editType">
+                        <option value="person">Person</option>
+                        <option value="organization">Organization</option>
+                        <option value="place">Place</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="editDescription">Description</label>
+                    <textarea class="form-textarea" id="editDescription"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="editWikidataId">Wikidata ID</label>
+                    <input type="text" class="form-input" id="editWikidataId" placeholder="Q123456">
+                    
+                    <div class="wikidata-search">
+                        <input type="text" class="form-input" id="wikidataSearch" placeholder="Search Wikidata...">
+                        <div class="search-results" id="searchResults"></div>
+                    </div>
+                </div>
+                
+                <div id="additionalFields">
+                    <!-- Additional fields based on entity type will be added here -->
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelEditBtn">Cancel</button>
+                    <button type="submit" class="btn">Save Changes</button>
+                </div>
+            </form>
         </div>
     </div>
 
