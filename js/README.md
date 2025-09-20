@@ -98,7 +98,7 @@ This directory contains the refactored JavaScript code organized into modular, a
 
 ## Usage
 
-The application is initialized in `app-new.js`:
+The application is initialized in `app.js`:
 
 ```javascript
 import { KnowledgeBaseApp } from './js/knowledge-base-app.js';

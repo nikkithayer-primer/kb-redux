@@ -21,28 +21,38 @@ class EntityProfile {
     }
 
     initializeEventListeners() {
+        // Helper function to safely add event listeners
+        const safeAddEventListener = (id, event, handler) => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.addEventListener(event, handler);
+            } else {
+                console.warn(`Element with id '${id}' not found`);
+            }
+        };
+
         // Edit functionality
-        document.getElementById('editBtn').addEventListener('click', () => this.toggleEditMode());
-        document.getElementById('cancelEditBtn').addEventListener('click', () => this.toggleEditMode(false));
-        document.getElementById('entityForm').addEventListener('submit', (e) => this.saveEntity(e));
+        safeAddEventListener('editBtn', 'click', () => this.toggleEditMode());
+        safeAddEventListener('cancelEditBtn', 'click', () => this.toggleEditMode(false));
+        safeAddEventListener('entityForm', 'submit', (e) => this.saveEntity(e));
         
         // Wikidata search
-        document.getElementById('wikidataSearch').addEventListener('input', (e) => this.searchWikidata(e.target.value));
-        document.getElementById('editWikidataId').addEventListener('input', (e) => this.validateWikidataId(e.target.value));
+        safeAddEventListener('wikidataSearch', 'input', (e) => this.searchWikidata(e.target.value));
+        safeAddEventListener('editWikidataId', 'input', (e) => this.validateWikidataId(e.target.value));
         
         // Merge functionality
-        document.getElementById('mergeBtn').addEventListener('click', () => this.showMergeModal());
-        document.getElementById('closeMergeModal').addEventListener('click', () => this.hideMergeModal());
-        document.getElementById('cancelMergeBtn').addEventListener('click', () => this.hideMergeModal());
-        document.getElementById('confirmMergeBtn').addEventListener('click', () => this.performMerge());
-        document.getElementById('fetchWikidataBtn').addEventListener('click', () => this.fetchWikidataInfo());
+        safeAddEventListener('mergeBtn', 'click', () => this.showMergeModal());
+        safeAddEventListener('closeMergeModal', 'click', () => this.hideMergeModal());
+        safeAddEventListener('cancelMergeBtn', 'click', () => this.hideMergeModal());
+        safeAddEventListener('confirmMergeBtn', 'click', () => this.performMerge());
+        safeAddEventListener('fetchWikidataBtn', 'click', () => this.fetchWikidataInfo());
         
         // Other actions
-        document.getElementById('viewConnectionsBtn').addEventListener('click', () => this.showAllConnections());
-        document.getElementById('exportBtn').addEventListener('click', () => this.exportEntityData());
+        safeAddEventListener('viewConnectionsBtn', 'click', () => this.showAllConnections());
+        safeAddEventListener('exportBtn', 'click', () => this.exportEntityData());
         
         // Entity type change handler
-        document.getElementById('editType').addEventListener('change', (e) => this.updateAdditionalFields(e.target.value));
+        safeAddEventListener('editType', 'change', (e) => this.updateAdditionalFields(e.target.value));
     }
 
     async loadEntityData() {
@@ -1192,10 +1202,10 @@ class EntityProfile {
         URL.revokeObjectURL(url);
     }
 
-    showSuccess(message) {
-        // Simple success message implementation
+    showStatus(message, type = 'info') {
+        // Simple status message implementation
         const statusDiv = document.createElement('div');
-        statusDiv.className = 'status-message status-success';
+        statusDiv.className = `status-message status-${type}`;
         statusDiv.textContent = message;
         statusDiv.style.position = 'fixed';
         statusDiv.style.top = '20px';
@@ -1204,26 +1214,20 @@ class EntityProfile {
         
         document.body.appendChild(statusDiv);
         
+        const timeout = type === 'success' ? 3000 : type === 'error' ? 5000 : 4000;
         setTimeout(() => {
-            document.body.removeChild(statusDiv);
-        }, 3000);
+            if (document.body.contains(statusDiv)) {
+                document.body.removeChild(statusDiv);
+            }
+        }, timeout);
+    }
+
+    showSuccess(message) {
+        this.showStatus(message, 'success');
     }
 
     showError(message) {
-        // Simple error message implementation
-        const statusDiv = document.createElement('div');
-        statusDiv.className = 'status-message status-error';
-        statusDiv.textContent = message;
-        statusDiv.style.position = 'fixed';
-        statusDiv.style.top = '20px';
-        statusDiv.style.right = '20px';
-        statusDiv.style.zIndex = '1000';
-        
-        document.body.appendChild(statusDiv);
-        
-        setTimeout(() => {
-            document.body.removeChild(statusDiv);
-        }, 5000);
+        this.showStatus(message, 'error');
     }
 }
 

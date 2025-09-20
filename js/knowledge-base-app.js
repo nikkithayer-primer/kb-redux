@@ -24,7 +24,7 @@ export class KnowledgeBaseApp {
 
     initializeEventListeners() {
         // File upload
-        const fileInput = document.getElementById('csvFile');
+        const fileInput = document.getElementById('fileInput');
         const processBtn = document.getElementById('processBtn');
         const clearBtn = document.getElementById('clearBtn');
 
@@ -49,6 +49,9 @@ export class KnowledgeBaseApp {
             const rows = await this.csvParser.parseFile(file);
             this.showStatus(`Loaded ${rows.length} rows from CSV`, 'success');
             console.log('Parsed CSV data:', rows);
+            
+            // Show processing controls
+            document.getElementById('processingControls').classList.remove('hidden');
         } catch (error) {
             this.showStatus('Error reading CSV file: ' + error.message, 'error');
             console.error('CSV parsing error:', error);
@@ -198,6 +201,14 @@ export class KnowledgeBaseApp {
 
     renderEntities() {
         this.tableManager.updateAllEntities(this.entityProcessor.processedEntities);
+        this.updateStatistics();
+    }
+
+    updateStatistics() {
+        document.getElementById('peopleCount').textContent = this.entityProcessor.processedEntities.people.length;
+        document.getElementById('organizationsCount').textContent = this.entityProcessor.processedEntities.organizations.length;
+        document.getElementById('placesCount').textContent = this.entityProcessor.processedEntities.places.length;
+        document.getElementById('eventsCount').textContent = this.entityProcessor.processedEntities.events.length;
     }
 
     clearData() {
@@ -213,24 +224,27 @@ export class KnowledgeBaseApp {
         this.csvParser.rawData = null;
         
         // Clear file input
-        document.getElementById('csvFile').value = '';
+        document.getElementById('fileInput').value = '';
         
         // Clear table
         this.tableManager.clearTable();
+        
+        // Hide processing controls
+        document.getElementById('processingControls').classList.add('hidden');
         
         this.showStatus('Data cleared', 'info');
     }
 
     showStatus(message, type = 'info') {
-        const statusDiv = document.getElementById('status');
+        const statusDiv = document.getElementById('statusMessage');
         statusDiv.textContent = message;
-        statusDiv.className = `status ${type}`;
+        statusDiv.className = `status-message status-${type}`;
         
         // Auto-hide success messages after 3 seconds
         if (type === 'success') {
             setTimeout(() => {
                 statusDiv.textContent = '';
-                statusDiv.className = 'status';
+                statusDiv.className = '';
             }, 3000);
         }
     }

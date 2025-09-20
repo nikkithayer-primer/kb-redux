@@ -103,27 +103,27 @@ body {
 .container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: var(--spacing-xl);
+    padding: var(--spacing-lg);
 }
 
 /* Header Styles */
 header {
     text-align: center;
-    margin-bottom: var(--spacing-4xl);
-    padding-bottom: var(--spacing-xl);
+    margin-bottom: var(--spacing-3xl);
+    padding-bottom: var(--spacing-lg);
     border-bottom: 1px solid var(--border-light);
 }
 
 h1 {
-    font-size: var(--font-3xl);
+    font-size: var(--font-2xl);
     font-weight: var(--font-light);
     color: var(--text-primary);
-    margin-bottom: var(--spacing-md);
+    margin-bottom: var(--spacing-sm);
 }
 
 .subtitle {
     color: var(--text-secondary);
-    font-size: var(--font-xl);
+    font-size: var(--font-);
     font-weight: var(--font-normal);
 }
 
@@ -132,26 +132,26 @@ h1 {
 .knowledge-base-section {
     background: var(--background-secondary);
     border-radius: var(--radius-xl);
-    padding: var(--spacing-3xl);
-    margin-bottom: var(--spacing-3xl);
+    padding: var(--spacing-2xl);
+    margin-bottom: var(--spacing-2xl);
     box-shadow: var(--shadow-md);
     border: 1px solid var(--border-light);
 }
 
 .section-title {
-    font-size: var(--font-2xl);
+    font-size: var(--font-xl);
     font-weight: var(--font-medium);
     color: var(--text-primary);
-    margin-bottom: var(--spacing-xl);
-    padding-bottom: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+    padding-bottom: var(--spacing-s);
     border-bottom: 1px solid var(--border-dark);
 }
 
 /* Upload Area Styles */
 .upload-area {
     border: 2px dashed var(--text-light);
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-4xl) var(--spacing-xl);
+    border-radius: var(--radius-l);
+    padding: var(--spacing-3xl) var(--spacing-lg);
     text-align: center;
     transition: var(--transition-normal);
     cursor: pointer;
@@ -166,13 +166,13 @@ h1 {
 .upload-icon {
     font-size: 3rem;
     color: var(--text-light);
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
 }
 
 .upload-text {
-    font-size: var(--font-xl);
+    font-size: var(--font-lg);
     color: var(--text-secondary);
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
 }
 
 input[type="file"] {
@@ -215,7 +215,7 @@ input[type="file"] {
     height: 4px;
     background: var(--border-dark);
     border-radius: 2px;
-    margin: var(--spacing-xl) 0;
+    margin: var(--spacing-lg) 0;
     overflow: hidden;
 }
 
@@ -228,9 +228,9 @@ input[type="file"] {
 
 /* Status Messages */
 .status-message {
-    padding: var(--spacing-lg);
+    padding: var(--spacing-md);
     border-radius: var(--radius-md);
-    margin: var(--spacing-lg) 0;
+    margin: var(--spacing-md) 0;
     font-weight: var(--font-medium);
 }
 
@@ -259,8 +259,8 @@ input[type="file"] {
 
 .loading {
     display: inline-block;
-    width: var(--spacing-xl);
-    height: var(--spacing-xl);
+    width: var(--spacing-lg);
+    height: var(--spacing-lg);
     border: 3px solid #f3f3f3;
     border-top: 3px solid var(--primary-color);
     border-radius: var(--radius-full);
@@ -276,14 +276,14 @@ input[type="file"] {
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: var(--spacing-xl);
+    gap: var(--spacing-lg);
     margin-bottom: var(--spacing-3xl);
 }
 
 .stat-card {
     background: var(--background-secondary);
     border-radius: var(--radius-lg);
-    padding: var(--spacing-xl);
+    padding: var(--spacing-lg);
     text-align: center;
     border: 1px solid var(--border-light);
 }

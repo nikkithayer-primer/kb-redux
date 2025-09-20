@@ -11,10 +11,10 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error('Failed to initialize Knowledge Base App:', error);
         
         // Show error to user
-        const statusDiv = document.getElementById('status');
+        const statusDiv = document.getElementById('statusMessage');
         if (statusDiv) {
             statusDiv.textContent = 'Failed to initialize application: ' + error.message;
-            statusDiv.className = 'status error';
+            statusDiv.className = 'status-message status-error';
         }
     }
 });
