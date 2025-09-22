@@ -1,5 +1,5 @@
 import { db } from './config.js';
-import { collection, doc, getDocs, updateDoc, query, where, deleteDoc, addDoc } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { collection, doc, getDocs, updateDoc, query, where, deleteDoc, addDoc, limit, orderBy } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 class EntityProfile {
     constructor(entityId = null, entityType = null) {
@@ -10,6 +10,10 @@ class EntityProfile {
         this.allEvents = [];
         this.networkGraph = null;
         this.map = null;
+        
+        // Simple caching to prevent repeated queries
+        this.entityCache = new Map();
+        this.eventsCache = new Map();
         
         // Only redirect if we're on the profile.html page
         if (!this.entityId || !this.entityType) {
@@ -97,10 +101,7 @@ class EntityProfile {
             };
             
             // Load all entities for connections
-            await this.loadAllEntities();
-            
-            // Load all events
-            await this.loadAllEvents();
+            await this.loadRelatedEntities();
             
             // Render the profile
             this.renderEntityProfile();
@@ -122,33 +123,163 @@ class EntityProfile {
         }
     }
 
-    async loadAllEntities() {
-        const collections = ['people', 'organizations', 'places'];
-        this.allEntities = [];
+    async loadRelatedEntities() {
+        // Only load entities that are actually connected to this entity
+        // Much more efficient than loading everything
+        this.allEntities = [this.currentEntity]; // Start with current entity
+        this.relatedEntityIds = new Set([this.currentEntity.id]);
         
+        // Get events related to this entity to find connections
+        await this.loadRelatedEvents();
+        
+        // Extract entity names from related events
+        const entityNames = new Set();
+        this.allEvents.forEach(event => {
+            // Add actors
+            if (event.actor) {
+                event.actor.split(',').forEach(name => entityNames.add(name.trim()));
+            }
+            // Add targets
+            if (event.target) {
+                event.target.split(',').forEach(name => entityNames.add(name.trim()));
+            }
+            // Add locations
+            if (event.locations) {
+                if (Array.isArray(event.locations)) {
+                    event.locations.forEach(loc => {
+                        const locName = typeof loc === 'string' ? loc : loc.name;
+                        if (locName) entityNames.add(locName);
+                    });
+                } else {
+                    event.locations.split(',').forEach(name => entityNames.add(name.trim()));
+                }
+            }
+        });
+
+        // Query only for entities we actually need
+        const collections = ['people', 'organizations', 'places'];
+        const nameArray = Array.from(entityNames);
+        
+        // Batch queries in chunks of 10 (Firestore 'in' query limit)
         for (const collectionName of collections) {
-            const querySnapshot = await getDocs(collection(db, collectionName));
-            querySnapshot.forEach((doc) => {
-                this.allEntities.push({
-                    id: doc.id,
-                    firestoreId: doc.id,
-                    type: collectionName.slice(0, -1), // Remove 's' from collection name
-                    ...doc.data()
-                });
-            });
+            for (let i = 0; i < nameArray.length; i += 10) {
+                const nameChunk = nameArray.slice(i, i + 10);
+                if (nameChunk.length === 0) continue;
+                
+                try {
+                    const q = query(
+                        collection(db, collectionName),
+                        where('name', 'in', nameChunk)
+                    );
+                    const querySnapshot = await getDocs(q);
+                    
+                    querySnapshot.forEach((doc) => {
+                        const entityData = {
+                            id: doc.id,
+                            firestoreId: doc.id,
+                            type: collectionName.slice(0, -1),
+                            ...doc.data()
+                        };
+                        
+                        // Only add if not already present
+                        if (!this.relatedEntityIds.has(entityData.id)) {
+                            this.allEntities.push(entityData);
+                            this.relatedEntityIds.add(entityData.id);
+                        }
+                    });
+                } catch (error) {
+                    console.warn(`Error querying ${collectionName}:`, error);
+                }
+            }
         }
+        
+        console.log(`Loaded ${this.allEntities.length} related entities (vs loading entire database)`);
     }
 
-    async loadAllEvents() {
-        const querySnapshot = await getDocs(collection(db, 'events'));
+    async loadRelatedEvents() {
+        // Only load events that mention this entity
+        const entityName = this.currentEntity.name;
+        
+        // Check cache first
+        if (this.eventsCache.has(entityName)) {
+            this.allEvents = this.eventsCache.get(entityName);
+            console.log(`Loaded ${this.allEvents.length} related events from cache`);
+            return;
+        }
+        
         this.allEvents = [];
         
-        querySnapshot.forEach((doc) => {
-            this.allEvents.push({
-                id: doc.id,
-                ...doc.data()
+        try {
+            // Query events where this entity is an actor
+            const actorQuery = query(
+                collection(db, 'events'),
+                where('actor', '>=', entityName),
+                where('actor', '<=', entityName + '\uf8ff')
+            );
+            const actorSnapshot = await getDocs(actorQuery);
+            
+            // Query events where this entity is a target
+            const targetQuery = query(
+                collection(db, 'events'),
+                where('target', '>=', entityName),
+                where('target', '<=', entityName + '\uf8ff')
+            );
+            const targetSnapshot = await getDocs(targetQuery);
+            
+            const eventIds = new Set();
+            
+            // Process actor events
+            actorSnapshot.forEach((doc) => {
+                const eventData = { id: doc.id, ...doc.data() };
+                if (eventData.actor && eventData.actor.includes(entityName)) {
+                    this.allEvents.push(eventData);
+                    eventIds.add(doc.id);
+                }
             });
-        });
+            
+            // Process target events (avoid duplicates)
+            targetSnapshot.forEach((doc) => {
+                if (!eventIds.has(doc.id)) {
+                    const eventData = { id: doc.id, ...doc.data() };
+                    if (eventData.target && eventData.target.includes(entityName)) {
+                        this.allEvents.push(eventData);
+                        eventIds.add(doc.id);
+                    }
+                }
+            });
+            
+            // TODO: Add location-based queries if needed
+            
+        } catch (error) {
+            console.error('Error loading related events:', error);
+            // Fallback: load a limited number of recent events
+            const fallbackQuery = query(
+                collection(db, 'events'),
+                orderBy('dateReceived', 'desc'),
+                limit(100)
+            );
+            const fallbackSnapshot = await getDocs(fallbackQuery);
+            fallbackSnapshot.forEach((doc) => {
+                const eventData = { id: doc.id, ...doc.data() };
+                if (this.isEventRelatedToEntity(eventData, entityName)) {
+                    this.allEvents.push(eventData);
+                }
+            });
+        }
+        
+        // Cache the results
+        this.eventsCache.set(entityName, this.allEvents);
+        
+        console.log(`Loaded ${this.allEvents.length} related events (vs loading entire database)`);
+    }
+    
+    isEventRelatedToEntity(event, entityName) {
+        return (event.actor && event.actor.includes(entityName)) ||
+               (event.target && event.target.includes(entityName)) ||
+               (event.locations && 
+                (Array.isArray(event.locations) 
+                    ? event.locations.some(loc => (typeof loc === 'string' ? loc : loc.name) === entityName)
+                    : event.locations.includes(entityName)));
     }
 
     renderEntityProfile() {
