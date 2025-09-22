@@ -352,4 +352,48 @@ export class FirebaseService {
             return { events: [], lastDoc: null, hasMore: false };
         }
     }
+
+    async exportAllData() {
+        try {
+            console.log('Exporting all knowledge base data...');
+            
+            const collections = ['people', 'organizations', 'places', 'unknown'];
+            const exportData = {
+                entities: {},
+                events: []
+            };
+
+            // Load all entity collections
+            for (const collectionName of collections) {
+                const collectionRef = collection(this.db, collectionName);
+                const snapshot = await getDocs(collectionRef);
+                
+                exportData.entities[collectionName] = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    firestoreId: doc.id,
+                    ...doc.data()
+                }));
+                
+                console.log(`Exported ${exportData.entities[collectionName].length} ${collectionName}`);
+            }
+
+            // Load all events
+            const eventsRef = collection(this.db, 'events');
+            const eventsSnapshot = await getDocs(eventsRef);
+            
+            exportData.events = eventsSnapshot.docs.map(doc => ({
+                id: doc.id,
+                firestoreId: doc.id,
+                ...doc.data()
+            }));
+            
+            console.log(`Exported ${exportData.events.length} events`);
+            
+            return exportData;
+
+        } catch (error) {
+            console.error('Error exporting all data:', error);
+            throw error;
+        }
+    }
 }

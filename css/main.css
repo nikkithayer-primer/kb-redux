@@ -229,46 +229,80 @@ input[type="file"] {
     border: 1px solid #bfdbfe;
 }
 
-/* Stats Grid - Minimalist */
-.stats-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-4);
-    margin-bottom: var(--space-4);
-    padding: var(--space-3);
-    background: var(--gray-50);
-    border-radius: var(--radius);
-    border: 1px solid var(--gray-100);
+
+/* Manual Entry Section */
+.manual-entry-section {
+    text-align: center;
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--gray-200);
 }
 
-.stat-card {
-    display: flex;
+.manual-entry-section .btn {
+    display: inline-flex;
     align-items: center;
     gap: var(--space-2);
-    padding: 0;
-    background: transparent;
-    border: none;
-    text-align: left;
-    min-width: 0;
-    flex: 0 0 auto;
 }
 
-.stat-number {
-    font-size: var(--font-lg);
-    font-weight: 600;
-    color: var(--primary);
-    margin: 0;
-    line-height: 1;
+/* Form Grid for Modal */
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
 }
 
-.stat-label {
+.form-grid .form-group:nth-child(4) {
+    grid-column: 1 / -1;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.form-group label {
     font-size: var(--font-sm);
-    color: var(--gray-600);
-    font-weight: 400;
-    text-transform: none;
-    letter-spacing: 0;
-    margin: 0;
-    line-height: 1;
+    font-weight: 600;
+    color: var(--gray-700);
+}
+
+.form-group input,
+.form-group textarea {
+    padding: var(--space-2);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius);
+    font-size: var(--font-sm);
+    transition: border-color 0.15s;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--gray-200);
+}
+
+modal-close{
+    border: 0;
+    background-color: transparent;
+    font-size: 18px;
+    color: var(--gray-400);
+    padding: var(--space-1) var(--space-2);
 }
 
 /* Utility Classes */
@@ -330,22 +364,6 @@ input[type="file"] {
         padding: var(--space-3);
     }
     
-    .stats-grid {
-        gap: var(--space-3);
-        padding: var(--space-2);
-    }
-    
-    .stat-card {
-        gap: var(--space-1);
-    }
-    
-    .stat-number {
-        font-size: var(--font-base);
-    }
-    
-    .stat-label {
-        font-size: var(--font-xs);
-    }
     
     .upload-section,
     .knowledge-base-section {

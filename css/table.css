@@ -70,6 +70,34 @@
     color: white;
 }
 
+/* Stats Filter Toggle - Combined Stats and Filters */
+.stat-filter-toggle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-3);
+    min-width: 80px;
+    border-radius: var(--radius);
+}
+
+.filter-label {
+    font-size: var(--font-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.filter-count {
+    font-size: var(--font-lg);
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.stat-filter-toggle.active .filter-count {
+    color: white;
+}
+
 /* Form Controls - Compact */
 .form-input {
     min-width: 200px;

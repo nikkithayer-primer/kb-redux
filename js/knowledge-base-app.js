@@ -33,6 +33,15 @@ export class KnowledgeBaseApp {
         // Deduplication button
         document.getElementById('deduplicationBtn').addEventListener('click', () => this.runDeduplication());
         
+        // Export knowledge base button
+        document.getElementById('exportKnowledgeBaseBtn').addEventListener('click', () => this.exportKnowledgeBase());
+        
+        // Manual entry modal
+        document.getElementById('manualEntryBtn').addEventListener('click', () => this.showManualEntryModal());
+        document.getElementById('closeManualEntryModal').addEventListener('click', () => this.hideManualEntryModal());
+        document.getElementById('cancelManualEntry').addEventListener('click', () => this.hideManualEntryModal());
+        document.getElementById('manualEntryForm').addEventListener('submit', (e) => this.handleManualEntrySubmit(e));
+        
         // Table manager events
         this.tableManager.initializeEventListeners();
         
@@ -228,11 +237,31 @@ export class KnowledgeBaseApp {
     }
 
     updateStatistics() {
-        document.getElementById('peopleCount').textContent = this.entityProcessor.processedEntities.people.length;
-        document.getElementById('organizationsCount').textContent = this.entityProcessor.processedEntities.organizations.length;
-        document.getElementById('placesCount').textContent = this.entityProcessor.processedEntities.places.length;
-        document.getElementById('unknownCount').textContent = this.entityProcessor.processedEntities.unknown.length;
-        document.getElementById('eventsCount').textContent = this.entityProcessor.processedEntities.events.length;
+        const peopleCount = this.entityProcessor.processedEntities.people.length;
+        const organizationsCount = this.entityProcessor.processedEntities.organizations.length;
+        const placesCount = this.entityProcessor.processedEntities.places.length;
+        const unknownCount = this.entityProcessor.processedEntities.unknown.length;
+        const eventsCount = this.entityProcessor.processedEntities.events.length;
+        const totalEntities = peopleCount + organizationsCount + placesCount + unknownCount;
+
+        // Safely update elements if they exist
+        const peopleCountEl = document.getElementById('peopleCount');
+        if (peopleCountEl) peopleCountEl.textContent = peopleCount;
+        
+        const organizationsCountEl = document.getElementById('organizationsCount');
+        if (organizationsCountEl) organizationsCountEl.textContent = organizationsCount;
+        
+        const placesCountEl = document.getElementById('placesCount');
+        if (placesCountEl) placesCountEl.textContent = placesCount;
+        
+        const unknownCountEl = document.getElementById('unknownCount');
+        if (unknownCountEl) unknownCountEl.textContent = unknownCount;
+        
+        const eventsCountEl = document.getElementById('eventsCount');
+        if (eventsCountEl) eventsCountEl.textContent = eventsCount;
+        
+        const totalCountEl = document.getElementById('totalCount');
+        if (totalCountEl) totalCountEl.textContent = totalEntities;
     }
 
     clearData() {
@@ -349,5 +378,129 @@ export class KnowledgeBaseApp {
                          entityType === 'organization' ? 'organizations' : 
                          entityType === 'unknown' ? 'unknown' : 'places';
         this.showProfile(entity.id, typeParam);
+    }
+
+    async exportKnowledgeBase() {
+        try {
+            // Disable button during export
+            const exportBtn = document.getElementById('exportKnowledgeBaseBtn');
+            const originalText = exportBtn.innerHTML;
+            exportBtn.disabled = true;
+            exportBtn.innerHTML = '<span>⏳</span> Exporting...';
+
+            this.showStatus('Preparing knowledge base export...', 'info');
+
+            // Gather all data from Firebase
+            const allData = await this.firebaseService.exportAllData();
+
+            // Create export object with metadata
+            const exportData = {
+                metadata: {
+                    exportDate: new Date().toISOString(),
+                    version: '1.0',
+                    totalEntities: Object.values(allData.entities).reduce((sum, collection) => sum + collection.length, 0),
+                    totalEvents: allData.events.length,
+                    collections: Object.keys(allData.entities)
+                },
+                entities: allData.entities,
+                events: allData.events
+            };
+
+            // Create and download file
+            const jsonString = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+
+            // Create download link
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `knowledge-base-export-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Clean up
+            URL.revokeObjectURL(url);
+
+            this.showStatus(`Knowledge base exported successfully! (${exportData.metadata.totalEntities} entities, ${exportData.metadata.totalEvents} events)`, 'success');
+
+        } catch (error) {
+            console.error('Error exporting knowledge base:', error);
+            this.showStatus('Error exporting knowledge base: ' + error.message, 'error');
+        } finally {
+            // Re-enable button
+            const exportBtn = document.getElementById('exportKnowledgeBaseBtn');
+            exportBtn.disabled = false;
+            exportBtn.innerHTML = '<span>📁</span> Export JSON';
+        }
+    }
+
+    showManualEntryModal() {
+        const modal = document.getElementById('manualEntryModal');
+        modal.classList.remove('hidden');
+        
+        // Set default date to today
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('manualDateReceived').value = today;
+    }
+
+    hideManualEntryModal() {
+        const modal = document.getElementById('manualEntryModal');
+        modal.classList.add('hidden');
+        
+        // Reset form
+        document.getElementById('manualEntryForm').reset();
+    }
+
+    async handleManualEntrySubmit(e) {
+        e.preventDefault();
+        
+        try {
+            // Get form values
+            const formData = {
+                Actor: document.getElementById('manualActor').value.trim(),
+                Action: document.getElementById('manualAction').value.trim(),
+                Target: document.getElementById('manualTarget').value.trim(),
+                Sentence: document.getElementById('manualSentence').value.trim(),
+                'Date Received': document.getElementById('manualDateReceived').value,
+                Locations: document.getElementById('manualLocations').value.trim(),
+                DateTime: document.getElementById('manualDateTime').value
+            };
+
+            // Validate required fields
+            if (!formData.Actor || !formData.Action || !formData.Sentence || !formData['Date Received']) {
+                this.showStatus('Please fill in all required fields', 'error');
+                return;
+            }
+
+            // Disable submit button
+            const submitBtn = document.getElementById('submitManualEntry');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Processing...';
+
+            this.showStatus('Processing manual entry...', 'info');
+
+            // Process the single row using existing pipeline
+            await this.processRow(formData);
+
+            // Save to Firebase
+            await this.saveToFirebase();
+
+            // Reload data to show the new entry
+            await this.loadExistingData();
+
+            this.showStatus('Manual entry added successfully!', 'success');
+            this.hideManualEntryModal();
+
+        } catch (error) {
+            console.error('Error processing manual entry:', error);
+            this.showStatus('Error processing manual entry: ' + error.message, 'error');
+        } finally {
+            // Re-enable submit button
+            const submitBtn = document.getElementById('submitManualEntry');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Add Entry';
+        }
     }
 }
