@@ -13,8 +13,21 @@
 <body>
     <div class="container" id="mainView">
         <header>
-            <h1>Knowledge Base</h1>
-            <p class="subtitle">Import CSV data: Actor, Action, Target, Sentence, Locations, Datetimes</p>
+            <div class="header-content">
+                <div class="header-left">
+                    <h1>Knowledge Base</h1>
+                    <p class="subtitle">Import CSV data: Actor, Action, Target, Sentence, Locations, Datetimes</p>
+                </div>
+                <div class="header-right">
+                    <button class="btn btn-secondary" id="manualEntryBtn">
+                        <span>✏️</span> Add Single Entry
+                    </button>
+                    <button class="btn btn-warning" id="deduplicationBtn">Dedupe</button>
+                    <button class="btn btn-secondary" id="exportKnowledgeBaseBtn">
+                        <span>📁</span> Export JSON
+                    </button>
+                </div>
+            </div>
         </header>
 
         <section class="upload-section">
@@ -30,12 +43,6 @@
             </div>
             
             <div id="statusMessage"></div>
-            
-            <div class="manual-entry-section">
-                <button class="btn btn-secondary" id="manualEntryBtn">
-                    <span>✏️</span> Add Single Entry
-                </button>
-            </div>
         </section>
 
         <section class="knowledge-base-section">
@@ -72,12 +79,6 @@
                     <input type="text" id="entitySearch" class="form-input" placeholder="Search...">
                 </div>
                 
-                <div class="action-group">
-                    <button class="btn btn-warning" id="deduplicationBtn">Dedupe</button>
-                    <button class="btn btn-secondary" id="exportKnowledgeBaseBtn">
-                        <span>📁</span> Export JSON
-                    </button>
-                </div>
             </div>
             
             <!-- Table View -->
