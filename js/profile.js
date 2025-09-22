@@ -583,6 +583,60 @@ class EntityProfile {
 
     initializeNetworkGraph() {
         const container = document.getElementById('networkGraph');
+        
+        // Show loading state immediately
+        this.showNetworkLoading(container);
+        
+        // Use Intersection Observer for lazy loading with fallback
+        if ('IntersectionObserver' in window) {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        // Graph is visible, start rendering
+                        observer.disconnect(); // Only load once
+                        this.startNetworkRendering(container);
+                    }
+                });
+            }, {
+                rootMargin: '50px', // Start loading when 50px away from viewport
+                threshold: 0.1
+            });
+            
+            observer.observe(container);
+        } else {
+            // Fallback for older browsers - load after a short delay
+            setTimeout(() => {
+                this.startNetworkRendering(container);
+            }, 500);
+        }
+    }
+
+    startNetworkRendering(container) {
+        // Update loading text to show we're actively building
+        const loadingText = container.querySelector('.network-loading-text');
+        if (loadingText) {
+            loadingText.textContent = 'Analyzing connections...';
+        }
+        
+        // Use requestAnimationFrame to defer the heavy computation
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                this.renderNetworkGraph(container);
+            }, 100); // Small delay to ensure loading state is visible
+        });
+    }
+
+    showNetworkLoading(container) {
+        container.innerHTML = `
+            <div class="network-loading">
+                <div class="network-loading-spinner"></div>
+                <div class="network-loading-text">Building network graph...</div>
+            </div>
+        `;
+    }
+
+    renderNetworkGraph(container) {
+        // Clear loading state and start rendering
         container.innerHTML = '';
         
         const width = container.clientWidth;
@@ -593,9 +647,18 @@ class EntityProfile {
             .attr('width', width)
             .attr('height', height);
         
-        // Create zoom behavior
+        // Zoom behavior with drag navigation enabled
         const zoom = d3.zoom()
-            .scaleExtent([0.1, 10])
+            .scaleExtent([0.5, 3])
+            .filter((event) => {
+                // Allow wheel zoom and drag pan, but not on nodes/text
+                if (event.type === 'wheel') return true;
+                if (event.type === 'mousedown') {
+                    // Only allow drag on background, not on nodes or labels
+                    return !event.target.closest('circle') && !event.target.closest('text');
+                }
+                return true;
+            })
             .on('zoom', (event) => {
                 zoomGroup.attr('transform', event.transform);
             });
@@ -606,7 +669,14 @@ class EntityProfile {
         // Create a group for all zoomable content
         const zoomGroup = svg.append('g');
         
-        // Prepare data for enhanced network graph
+        // Prepare data for enhanced network graph - optimized processing
+        const { nodes, links } = this.processNetworkData();
+        
+        // Continue with rendering after data is processed
+        this.renderNetworkElements(container, svg, zoomGroup, nodes, links, width, height, zoom);
+    }
+
+    processNetworkData() {
         const nodes = [];
         const links = [];
         const processedEntities = new Set();
@@ -616,11 +686,14 @@ class EntityProfile {
         nodes.push(centerEntity);
         processedEntities.add(centerEntity.id);
         
-        
         // Find first-degree connections (direct connections to center entity)
         const firstDegreeConnections = this.getEntityConnections(centerEntity);
         
-        firstDegreeConnections.forEach(connection => {
+        // Limit connections to prevent performance issues
+        const maxFirstDegree = 20;
+        const maxSecondDegree = 30;
+        
+        firstDegreeConnections.slice(0, maxFirstDegree).forEach(connection => {
             if (!processedEntities.has(connection.entity.id)) {
                 const firstDegreeNode = { ...connection.entity, isCenter: false, degree: 1 };
                 nodes.push(firstDegreeNode);
@@ -639,7 +712,7 @@ class EntityProfile {
                 // Find second-degree connections (entities connected to first-degree entities)
                 const secondDegreeConnections = this.getEntityConnections(connection.entity);
                 
-                secondDegreeConnections.forEach(secondConnection => {
+                secondDegreeConnections.slice(0, Math.floor(maxSecondDegree / maxFirstDegree)).forEach(secondConnection => {
                     // Only add if not already processed and not the center entity
                     if (!processedEntities.has(secondConnection.entity.id) && 
                         secondConnection.entity.id !== centerEntity.id) {
@@ -662,6 +735,11 @@ class EntityProfile {
             }
         });
         
+        return { nodes, links };
+    }
+
+    renderNetworkElements(container, svg, zoomGroup, nodes, links, width, height, zoom) {
+        
         
         // Create force simulation with different forces for different degrees
         const simulation = d3.forceSimulation(nodes)
@@ -680,7 +758,7 @@ class EntityProfile {
             .attr('stroke-width', d => d.isDirect ? 2 : 1)
             .attr('stroke-dasharray', d => d.isDirect ? '0' : '5,5');
         
-        // Add nodes with different sizes for different degrees
+        // Add nodes with different sizes for different degrees - NO DRAG, just clicks
         const node = zoomGroup.append('g')
             .selectAll('circle')
             .data(nodes)
@@ -691,31 +769,33 @@ class EntityProfile {
             .attr('stroke-width', d => d.degree === 0 ? 2 : 2)
             .attr('opacity', d => d.degree === 2 ? 0.7 : 1)
             .style('cursor', 'pointer')
+            .style('pointer-events', 'all') // Ensure mouse events work
             .on('click', (event, d) => {
-                // Prevent drag from interfering with click
-                if (event.defaultPrevented) return;
+                console.log('Node clicked:', d.name); // Debug log
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+                
                 this.navigateToEntity(d.id, d.type);
             })
             .on('mouseover', function(event, d) {
                 d3.select(this)
                     .transition()
                     .duration(200)
-                    .attr('r', d => (d.degree === 0 ? 16 : d.degree === 1 ? 10 : 7) * 1.2)
-                    .attr('stroke-width', 3);
+                    .attr('r', d => (d.degree === 0 ? 16 : d.degree === 1 ? 10 : 7) * 1.3)
+                    .attr('stroke-width', 4)
+                    .style('filter', 'brightness(1.1)');
             })
             .on('mouseout', function(event, d) {
                 d3.select(this)
                     .transition()
                     .duration(200)
                     .attr('r', d => d.degree === 0 ? 16 : d.degree === 1 ? 10 : 7)
-                    .attr('stroke-width', d => d.degree === 0 ? 2 : 2);
-            })
-            .call(d3.drag()
-                .on('start', dragstarted)
-                .on('drag', dragged)
-                .on('end', dragended));
+                    .attr('stroke-width', d => d.degree === 0 ? 2 : 2)
+                    .style('filter', 'none');
+            });
         
-        // Add labels with different styling for different degrees
+        // Add labels with different styling for different degrees - NO DRAG, just clicks
         const label = zoomGroup.append('g')
             .selectAll('text')
             .data(nodes)
@@ -728,18 +808,27 @@ class EntityProfile {
             .attr('text-anchor', 'middle')
             .attr('dy', d => d.degree === 0 ? -20 : d.degree === 1 ? -15 : -12)
             .style('cursor', 'pointer')
+            .style('pointer-events', 'all') // Ensure mouse events work
+            .style('user-select', 'none') // Prevent text selection
             .on('click', (event, d) => {
+                console.log('Label clicked:', d.name); // Debug log
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+                
                 this.navigateToEntity(d.id, d.type);
             })
             .on('mouseover', function(event, d) {
                 d3.select(this)
                     .style('text-decoration', 'underline')
-                    .style('fill', '#007bff');
+                    .style('fill', '#007bff')
+                    .style('font-weight', 'bold');
             })
             .on('mouseout', function(event, d) {
                 d3.select(this)
                     .style('text-decoration', 'none')
-                    .style('fill', d.degree === 0 ? '#2c3e50' : '#333');
+                    .style('fill', d.degree === 0 ? '#2c3e50' : '#333')
+                    .style('font-weight', d.degree === 0 ? 'bold' : 'normal');
             });
         
         // Update positions on simulation tick
@@ -759,23 +848,7 @@ class EntityProfile {
                 .attr('y', d => d.y);
         });
         
-        // Drag functions that work with zoom
-        function dragstarted(event, d) {
-            if (!event.active) simulation.alphaTarget(0.3).restart();
-            d.fx = d.x;
-            d.fy = d.y;
-        }
-        
-        function dragged(event, d) {
-            d.fx = event.x;
-            d.fy = event.y;
-        }
-        
-        function dragended(event, d) {
-            if (!event.active) simulation.alphaTarget(0);
-            d.fx = null;
-            d.fy = null;
-        }
+        // No drag functions needed - removed for simplicity and reliability
         
         // Enhanced tooltips
         node.append('title').text(d => {
@@ -794,21 +867,23 @@ class EntityProfile {
         });
         
         // Store references for later use
-        this.networkGraph = { svg, simulation, zoom, zoomGroup };
+        this.networkGraph = { svg, simulation, zoom, zoomGroup, nodes, labels: label };
         
         // Add zoom controls
         this.addZoomControls(container, zoom, svg);
+        
+        // Add keyboard navigation
+        this.addKeyboardNavigation(container, zoom, svg);
     }
 
     addZoomControls(container, zoom, svg) {
-        // Create zoom controls container
+        // Create zoom controls container with improved styling
         const controlsDiv = document.createElement('div');
         controlsDiv.className = 'network-zoom-controls';
         controlsDiv.innerHTML = `
-            <button class="zoom-btn" id="profileZoomIn" title="Zoom In">+</button>
-            <button class="zoom-btn" id="profileZoomOut" title="Zoom Out">−</button>
-            <button class="zoom-btn" id="profileZoomReset" title="Reset Zoom">⌂</button>
-            <button class="zoom-btn" id="profileZoomFit" title="Fit to Screen">⊡</button>
+            <button class="zoom-btn" id="profileZoomIn" title="Zoom In (+)">+</button>
+            <button class="zoom-btn" id="profileZoomOut" title="Zoom Out (-)">−</button>
+            <button class="zoom-btn" id="profileZoomReset" title="Reset Zoom (0)">⌂</button>
         `;
         
         // Position controls in top-right corner
@@ -839,36 +914,52 @@ class EntityProfile {
                 d3.zoomIdentity.translate(0, 0).scale(1)
             );
         });
-        
-        document.getElementById('profileZoomFit').addEventListener('click', () => {
-            this.zoomToFitNodes(svg, zoom);
-        });
     }
 
-    zoomToFitNodes(svg, zoom) {
-        if (!this.networkGraph || !this.networkGraph.zoomGroup) return;
+    addKeyboardNavigation(container, zoom, svg) {
+        // Add keyboard event listener
+        const handleKeyPress = (event) => {
+            if (!container.contains(document.activeElement) && !container.matches(':hover')) {
+                return; // Only handle keys when focused on the network graph
+            }
+            
+            switch(event.key) {
+                case '+':
+                case '=':
+                    event.preventDefault();
+                    svg.transition().duration(300).call(
+                        zoom.scaleBy, 1.5
+                    );
+                    break;
+                case '-':
+                case '_':
+                    event.preventDefault();
+                    svg.transition().duration(300).call(
+                        zoom.scaleBy, 1 / 1.5
+                    );
+                    break;
+                case '0':
+                    event.preventDefault();
+                    svg.transition().duration(500).call(
+                        zoom.transform,
+                        d3.zoomIdentity
+                    );
+                    break;
+            }
+        };
         
-        try {
-            const bounds = this.networkGraph.zoomGroup.node().getBBox();
-            const fullWidth = svg.node().clientWidth || 800;
-            const fullHeight = svg.node().clientHeight || 400;
-            const width = bounds.width;
-            const height = bounds.height;
-            const midX = bounds.x + width / 2;
-            const midY = bounds.y + height / 2;
-
-            if (width === 0 || height === 0) return;
-
-            const scale = Math.min(fullWidth / width, fullHeight / height) * 0.8;
-            const translate = [fullWidth / 2 - scale * midX, fullHeight / 2 - scale * midY];
-
-            svg.transition().duration(750).call(
-                zoom.transform,
-                d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale)
-            );
-        } catch (error) {
-            console.warn('Could not fit nodes to screen:', error);
-        }
+        // Make container focusable and add event listeners
+        container.setAttribute('tabindex', '0');
+        container.addEventListener('keydown', handleKeyPress);
+        
+        // Add focus styling
+        container.style.outline = 'none';
+        container.addEventListener('focus', () => {
+            container.style.boxShadow = '0 0 0 2px #007bff';
+        });
+        container.addEventListener('blur', () => {
+            container.style.boxShadow = 'none';
+        });
     }
 
     getEntityConnections(entity) {

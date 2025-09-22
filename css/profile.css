@@ -213,6 +213,71 @@
     height: 300px;
     border-radius: var(--radius);
     overflow: hidden;
+    position: relative;
+}
+
+/* Network Graph Loading State */
+.network-loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--gray-50);
+    border-radius: var(--radius);
+}
+
+.network-loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid var(--gray-200);
+    border-top: 4px solid var(--blue-500);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: var(--space-3);
+}
+
+.network-loading-text {
+    color: var(--gray-600);
+    font-size: var(--font-sm);
+    font-weight: 500;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Network Graph Skeleton */
+.network-skeleton {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--gray-50);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.network-skeleton::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+    0% { left: -100%; }
+    100% { left: 100%; }
 }
 
 /* Network Legend - Compact */
@@ -245,36 +310,45 @@
     border-radius: 2px;
 }
 
-/* Network Zoom Controls */
+/* Network Zoom Controls - More Prominent */
 .network-zoom-controls {
     position: absolute;
-    bottom: var(--space-2);
-    left: var(--space-2);
+    top: var(--space-2);
+    right: var(--space-2);
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
+    z-index: 10;
 }
 
 .zoom-btn {
-    width: 32px;
-    height: 32px;
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: white;
-    border: 1px solid var(--gray-300);
+    border: 2px solid var(--gray-300);
     border-radius: var(--radius);
     cursor: pointer;
-    font-size: var(--font-sm);
-    font-weight: 600;
-    color: var(--gray-600);
-    transition: all 0.15s;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gray-700);
+    transition: all 0.2s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .zoom-btn:hover {
-    background: var(--gray-50);
-    border-color: var(--gray-400);
+    background: var(--blue-50);
+    border-color: var(--blue-400);
+    color: var(--blue-600);
+    transform: scale(1.05);
 }
+
+.zoom-btn:active {
+    transform: scale(0.95);
+}
+
 
 /* Map Container */
 #map {
