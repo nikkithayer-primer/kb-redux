@@ -564,11 +564,29 @@
     display: inline-flex;
     align-items: center;
     padding: var(--space-1) var(--space-2);
-    background: rgba(37, 99, 235, 0.1);
-    color: var(--primary);
     border-radius: 999px;
     font-weight: 600;
     text-transform: capitalize;
+    font-size: var(--font-xs);
+    border: 1px solid transparent;
+}
+
+.event-action.actor {
+    background: rgba(37, 99, 235, 0.1);
+    color: var(--primary);
+    border: 1px solid rgba(37, 99, 235, 0.2);
+}
+
+.event-action.target {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.event-action.location {
+    background: rgba(16, 185, 129, 0.1);
+    color: #059669;
+    border: 1px solid rgba(16, 185, 129, 0.2);
 }
 
 .event-location {

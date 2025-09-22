@@ -551,6 +551,18 @@ class EntityProfile {
             const eventDate = this.parseEventDate(event.dateReceived);
             const dateString = eventDate ? this.formatTimelineDate(eventDate) : 'Unknown date';
             
+            // Determine the role of the current entity in this event
+            let role = 'location'; // default
+            if (event.actor.includes(this.currentEntity.name)) {
+                role = 'actor';
+            } else if (event.target && event.target.includes(this.currentEntity.name)) {
+                role = 'target';
+            } else if (Array.isArray(event.locations) 
+                ? event.locations.some(loc => (typeof loc === 'string' ? loc : loc.name) === this.currentEntity.name)
+                : event.locations && event.locations.includes(this.currentEntity.name)) {
+                role = 'location';
+            }
+            
             // Format location with icon
             const locationText = Array.isArray(event.locations) 
                 ? event.locations.map(loc => typeof loc === 'string' ? loc : loc.name).filter(l => l).join(', ')
@@ -560,7 +572,7 @@ class EntityProfile {
                 <div class="event-date">${dateString}</div>
                 <div class="event-sentence">${event.sentence || 'No description available'}</div>
                 <div class="event-meta">
-                    <span class="event-action">${event.action}</span>
+                    <span class="event-action ${role}">${role}</span>
                     ${locationText ? `<span class="event-location">${locationText}</span>` : ''}
                 </div>
             `;
