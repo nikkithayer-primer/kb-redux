@@ -315,7 +315,7 @@ input[type="file"] {
     border-top: 1px solid var(--gray-200);
 }
 
-modal-close{
+.modal-close{
     border: 0;
     background-color: transparent;
     font-size: 18px;

@@ -202,6 +202,12 @@ export class TableManager {
         // Map entity type to collection name
         const collectionName = this.getCollectionName(entityType);
         
+        // Make row draggable
+        row.draggable = true;
+        row.dataset.entityId = entity.firestoreId || entity.id; // Use firestoreId for Firebase lookups
+        row.dataset.entityType = collectionName;
+        row.dataset.entityName = entity.name;
+        
         row.innerHTML = `
             <td class="entity-name-cell" onclick="window.app.showProfile('${entity.id}', '${collectionName}')">${entity.name}</td>
             <td><span class="entity-type-badge ${entityType}">${entityType}</span></td>
@@ -209,6 +215,9 @@ export class TableManager {
             <td class="connections-count">${connectionsCount}</td>
             <td>${entity.wikidata_id ? `<a href="https://www.wikidata.org/wiki/${entity.wikidata_id}" class="wikidata-link">${entity.wikidata_id}</a>` : '—'}</td>
         `;
+        
+        // Add drag and drop event listeners
+        this.addDragAndDropListeners(row);
         
         return row;
     }
@@ -234,5 +243,245 @@ export class TableManager {
         this.filteredEntities = [];
         const tableBody = document.getElementById('entitiesTableBody');
         tableBody.innerHTML = '<tr><td colspan="5" class="no-results">No data loaded</td></tr>';
+    }
+
+    addDragAndDropListeners(row) {
+        // Drag start
+        row.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', ''); // Required for Firefox
+            row.classList.add('dragging');
+            
+            // Store the dragged entity data
+            this.draggedEntity = {
+                id: row.dataset.entityId,
+                type: row.dataset.entityType,
+                name: row.dataset.entityName,
+                element: row
+            };
+        });
+
+        // Drag end
+        row.addEventListener('dragend', (e) => {
+            row.classList.remove('dragging');
+            this.clearDropZones();
+            // Don't clear draggedEntity here if a merge is in progress
+            if (!this.mergeInProgress) {
+                this.draggedEntity = null;
+            }
+        });
+
+        // Drag over (required for drop to work)
+        row.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            if (this.draggedEntity && row.dataset.entityId !== this.draggedEntity.id) {
+                row.classList.add('drop-zone');
+            }
+        });
+
+        // Drag leave
+        row.addEventListener('dragleave', (e) => {
+            // Only remove drop-zone if we're actually leaving the row
+            if (!row.contains(e.relatedTarget)) {
+                row.classList.remove('drop-zone');
+            }
+        });
+
+        // Drop
+        row.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (this.draggedEntity && row.dataset.entityId !== this.draggedEntity.id) {
+                console.log('Drop event triggered:', {
+                    draggedEntity: this.draggedEntity.name,
+                    targetEntity: row.dataset.entityName,
+                    draggedElement: this.draggedEntity.element
+                });
+                
+                this.handleEntityMerge(this.draggedEntity, {
+                    id: row.dataset.entityId,
+                    type: row.dataset.entityType,
+                    name: row.dataset.entityName,
+                    element: row
+                });
+            }
+            this.clearDropZones();
+        });
+    }
+
+    clearDropZones() {
+        const dropZones = document.querySelectorAll('.drop-zone');
+        dropZones.forEach(zone => zone.classList.remove('drop-zone'));
+    }
+
+    async handleEntityMerge(draggedEntity, targetEntity) {
+        try {
+            // Show confirmation dialog
+            const confirmMessage = `Merge "${draggedEntity.name}" into "${targetEntity.name}"?\n\n` +
+                                 `This will:\n` +
+                                 `• Move all events from "${draggedEntity.name}" to "${targetEntity.name}"\n` +
+                                 `• Add "${draggedEntity.name}" as an alias to "${targetEntity.name}"\n` +
+                                 `• Delete the "${draggedEntity.name}" entity\n\n` +
+                                 `This action cannot be undone.`;
+
+            if (!confirm(confirmMessage)) {
+                this.draggedEntity = null;
+                return;
+            }
+
+            // Set merge flag to prevent dragend from clearing draggedEntity
+            this.mergeInProgress = true;
+
+            // Show loading state
+            targetEntity.element.style.opacity = '0.5';
+            draggedEntity.element.style.opacity = '0.5';
+
+            // Call the merge function from the main app
+            if (window.app && window.app.mergeEntities) {
+                console.log('Starting merge process...');
+                await window.app.mergeEntities(draggedEntity, targetEntity);
+                console.log('Merge completed, removing element...');
+                
+                // Remove the dragged row from the table immediately
+                console.log('Removing dragged element:', {
+                    element: draggedEntity.element,
+                    parentNode: draggedEntity.element?.parentNode,
+                    entityId: draggedEntity.id,
+                    entityName: draggedEntity.name
+                });
+                
+                if (draggedEntity.element && draggedEntity.element.parentNode) {
+                    draggedEntity.element.parentNode.removeChild(draggedEntity.element);
+                    console.log('Dragged element removed successfully');
+                } else {
+                    // Try to find the element by data attribute as fallback
+                    console.log('Primary removal failed, trying fallback method...');
+                    const tableBody = document.getElementById('entitiesTableBody');
+                    if (tableBody) {
+                        const elementToRemove = tableBody.querySelector(`tr[data-entity-id="${draggedEntity.id}"]`);
+                        if (elementToRemove) {
+                            elementToRemove.remove();
+                            console.log('Dragged element removed using fallback method');
+                        } else {
+                            console.error('Could not find dragged element to remove:', draggedEntity.id);
+                        }
+                    } else {
+                        console.error('Could not find table body element');
+                    }
+                }
+                
+                // Update the target row with new connection count if available
+                this.updateRowAfterMerge(targetEntity);
+                
+                // Update connection counts for all visible rows
+                this.updateAllConnectionCounts();
+                
+                // Reset opacity
+                targetEntity.element.style.opacity = '1';
+                
+                // Show success message
+                this.showMergeSuccess(draggedEntity.name, targetEntity.name);
+            } else {
+                throw new Error('Merge functionality not available');
+            }
+
+        } catch (error) {
+            console.error('Error merging entities:', error);
+            
+            // Reset opacity
+            targetEntity.element.style.opacity = '1';
+            if (draggedEntity.element) {
+                draggedEntity.element.style.opacity = '1';
+            }
+            
+            alert('Error merging entities: ' + error.message);
+        } finally {
+            // Clear merge flag and dragged entity
+            this.mergeInProgress = false;
+            this.draggedEntity = null;
+        }
+    }
+
+    updateRowAfterMerge(targetEntity) {
+        try {
+            // Find the updated entity data from the app
+            if (window.app && window.app.entityProcessor) {
+                const collections = ['people', 'organizations', 'places', 'unknown'];
+                let updatedEntity = null;
+                
+                // Find the updated entity
+                for (const collection of collections) {
+                    const entities = window.app.entityProcessor.processedEntities[collection];
+                    if (entities) {
+                        updatedEntity = entities.find(e => 
+                            e.firestoreId === targetEntity.id || e.id === targetEntity.id
+                        );
+                        if (updatedEntity) break;
+                    }
+                }
+                
+                if (updatedEntity) {
+                    // Update the connection count in the table row
+                    const connectionCountCell = targetEntity.element.querySelector('.connections-count');
+                    if (connectionCountCell) {
+                        const newCount = updatedEntity.connectionCount || 0;
+                        connectionCountCell.textContent = newCount;
+                        console.log(`Updated connection count for ${targetEntity.name}: ${newCount}`);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error updating row after merge:', error);
+        }
+    }
+
+    updateAllConnectionCounts() {
+        try {
+            console.log('Updating connection counts for all visible rows...');
+            const tableBody = document.getElementById('entitiesTableBody');
+            if (!tableBody) return;
+
+            const rows = tableBody.querySelectorAll('tr[data-entity-id]');
+            rows.forEach(row => {
+                const entityId = row.dataset.entityId;
+                if (entityId && window.app && window.app.entityProcessor) {
+                    // Find the entity in the processed data
+                    const collections = ['people', 'organizations', 'places', 'unknown'];
+                    let entity = null;
+                    
+                    for (const collection of collections) {
+                        const entities = window.app.entityProcessor.processedEntities[collection];
+                        if (entities) {
+                            entity = entities.find(e => e.firestoreId === entityId || e.id === entityId);
+                            if (entity) break;
+                        }
+                    }
+                    
+                    if (entity) {
+                        const connectionCountCell = row.querySelector('.connections-count');
+                        if (connectionCountCell) {
+                            const newCount = entity.connectionCount || 0;
+                            connectionCountCell.textContent = newCount;
+                        }
+                    }
+                }
+            });
+            console.log('Connection counts updated for all visible rows');
+        } catch (error) {
+            console.error('Error updating all connection counts:', error);
+        }
+    }
+
+    showMergeSuccess(draggedName, targetName) {
+        // Create a temporary success message
+        const message = document.createElement('div');
+        message.className = 'merge-success-message';
+        message.textContent = `Successfully merged "${draggedName}" into "${targetName}"`;
+        document.body.appendChild(message);
+
+        // Remove after 3 seconds
+        setTimeout(() => {
+            if (message.parentNode) {
+                message.parentNode.removeChild(message);
+            }
+        }, 3000);
     }
 }

@@ -169,9 +169,9 @@ export class EntityProcessor {
             ...this.processedEntities.unknown
         ];
         
-        // Simple name matching for speed
+        // First try exact name matching for speed
         const nameLower = name.toLowerCase();
-        const match = allEntities.find(entity => 
+        let match = allEntities.find(entity => 
             entity.name.toLowerCase() === nameLower ||
             (entity.aliases && entity.aliases.some(alias => alias.toLowerCase() === nameLower))
         );
@@ -180,7 +180,31 @@ export class EntityProcessor {
             return match;
         }
         
-        return null;
+        // Try normalized form matching
+        const normalizedName = this.normalizeEntityName(name);
+        const normalizedNameLower = normalizedName.toLowerCase();
+        
+        if (normalizedNameLower !== nameLower) {
+            match = allEntities.find(entity => {
+                // Check if entity name or aliases match the normalized form
+                const entityNormalizedLower = this.normalizeEntityName(entity.name).toLowerCase();
+                if (entityNormalizedLower === normalizedNameLower) {
+                    return true;
+                }
+                
+                // Check aliases
+                if (entity.aliases) {
+                    return entity.aliases.some(alias => {
+                        const aliasNormalizedLower = this.normalizeEntityName(alias).toLowerCase();
+                        return aliasNormalizedLower === normalizedNameLower;
+                    });
+                }
+                
+                return false;
+            });
+        }
+        
+        return match || null;
     }
 
     ensureEntityInProcessedList(entity) {
@@ -250,6 +274,61 @@ export class EntityProcessor {
         return sorted1.every((val, index) => val === sorted2[index]);
     }
 
+    normalizeEntityName(name) {
+        let normalized = name.trim();
+        
+        // Handle possessives - remove 's or s'
+        normalized = normalized.replace(/['']s$/i, '');  // Qatar's → Qatar
+        normalized = normalized.replace(/s['']$/i, '');  // countries' → countries
+        
+        // Handle common plurals
+        const pluralRules = [
+            // Irregular plurals (most specific first)
+            { pattern: /\bchildren$/i, replacement: 'child' },
+            { pattern: /\bpeople$/i, replacement: 'person' },
+            { pattern: /\bmen$/i, replacement: 'man' },
+            { pattern: /\bwomen$/i, replacement: 'woman' },
+            { pattern: /\bmice$/i, replacement: 'mouse' },
+            { pattern: /\bfeet$/i, replacement: 'foot' },
+            { pattern: /\bgeese$/i, replacement: 'goose' },
+            { pattern: /\bteeth$/i, replacement: 'tooth' },
+            
+            // Common group/organization plurals
+            { pattern: /\bhouthis$/i, replacement: 'Houthi' },
+            { pattern: /\btaliban$/i, replacement: 'Taliban' }, // Already singular but often treated as plural
+            { pattern: /\bhezbollah$/i, replacement: 'Hezbollah' },
+            { pattern: /\bisraelis$/i, replacement: 'Israeli' },
+            { pattern: /\bpalestinians$/i, replacement: 'Palestinian' },
+            { pattern: /\bamericans$/i, replacement: 'American' },
+            { pattern: /\brussians$/i, replacement: 'Russian' },
+            { pattern: /\bchinese$/i, replacement: 'Chinese' }, // Same for singular/plural
+            { pattern: /\brepublicans$/i, replacement: 'Republican' },
+            { pattern: /\bdemocrats$/i, replacement: 'Democrat' },
+            
+            // Words ending in -ies
+            { pattern: /ies$/i, replacement: 'y' },
+            
+            // Words ending in -ves
+            { pattern: /ves$/i, replacement: 'f' },
+            
+            // Words ending in -ses, -ches, -shes, -xes
+            { pattern: /(s|ch|sh|x)es$/i, replacement: '$1' },
+            
+            // Words ending in -s (but not -ss, -us, -is)
+            { pattern: /([^susi])s$/i, replacement: '$1' },
+        ];
+        
+        // Apply plural rules
+        for (const rule of pluralRules) {
+            if (rule.pattern.test(normalized)) {
+                normalized = normalized.replace(rule.pattern, rule.replacement);
+                break; // Apply only the first matching rule
+            }
+        }
+        
+        return normalized.trim();
+    }
+
     generateSearchVariations(query) {
         // Check cache first
         if (this.nameVariationCache.has(query)) {
@@ -259,6 +338,12 @@ export class EntityProcessor {
         const variations = [query];
         const lowerQuery = query.toLowerCase().trim();
         
+        // Add normalized form (handle plurals and possessives)
+        const normalized = this.normalizeEntityName(query);
+        if (normalized !== query) {
+            variations.push(normalized);
+        }
+        
         // Remove common prefixes and articles
         const prefixesToRemove = ['the ', 'a ', 'an '];
         for (const prefix of prefixesToRemove) {
@@ -266,6 +351,11 @@ export class EntityProcessor {
                 const withoutPrefix = query.substring(prefix.length).trim();
                 if (withoutPrefix.length > 0) {
                     variations.push(withoutPrefix);
+                    // Also normalize the version without prefixes
+                    const normalizedWithoutPrefix = this.normalizeEntityName(withoutPrefix);
+                    if (normalizedWithoutPrefix !== withoutPrefix) {
+                        variations.push(normalizedWithoutPrefix);
+                    }
                 }
             }
         }
@@ -273,12 +363,21 @@ export class EntityProcessor {
         // Add version with "the" if it doesn't already have it
         if (!lowerQuery.startsWith('the ')) {
             variations.push(`the ${query}`);
+            // Also add normalized version with "the"
+            if (normalized !== query) {
+                variations.push(`the ${normalized}`);
+            }
         }
         
         // Remove punctuation variations
         const noPunctuation = query.replace(/[.,!?;:'"()-]/g, '').trim();
         if (noPunctuation !== query && noPunctuation.length > 0) {
             variations.push(noPunctuation);
+            // Also normalize the version without punctuation
+            const normalizedNoPunctuation = this.normalizeEntityName(noPunctuation);
+            if (normalizedNoPunctuation !== noPunctuation) {
+                variations.push(normalizedNoPunctuation);
+            }
         }
         
         // Remove duplicates
@@ -305,7 +404,31 @@ export class EntityProcessor {
         };
     }
 
-    parseEntities(entityString) {
+    splitCompoundEntities(entityString) {
+        if (!entityString || entityString.trim() === '') return [];
+        
+        // First split by conjunctions (and, &, plus)
+        const conjunctionPattern = /\s+(?:and|&|\+)\s+/i;
+        const conjunctionParts = entityString.split(conjunctionPattern);
+        
+        if (conjunctionParts.length > 1) {
+            // Multiple entities connected by conjunctions
+            const splitEntities = [];
+            
+            for (const part of conjunctionParts) {
+                // For each part, also check for comma-separated entities
+                const commaSplit = this.parseCommaSeparatedEntities(part.trim());
+                splitEntities.push(...commaSplit);
+            }
+            
+            return splitEntities;
+        }
+        
+        // No conjunctions found, just parse comma-separated entities
+        return this.parseCommaSeparatedEntities(entityString);
+    }
+
+    parseCommaSeparatedEntities(entityString) {
         if (!entityString || entityString.trim() === '') return [];
         
         const entities = [];
@@ -325,6 +448,10 @@ export class EntityProcessor {
         }
         
         return entities.filter(e => e.length > 0);
+    }
+
+    parseEntities(entityString) {
+        return this.splitCompoundEntities(entityString);
     }
 
     determineEntityType(name, wikidataInfo, role = null) {

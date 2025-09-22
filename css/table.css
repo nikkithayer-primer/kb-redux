@@ -303,3 +303,51 @@
         padding: var(--space-2) var(--space-1);
     }
 }
+
+/* Drag and Drop Styles */
+.dragging {
+    opacity: 0.5;
+    transform: rotate(2deg);
+    cursor: grabbing;
+}
+
+.drop-zone {
+    background: rgba(37, 99, 235, 0.1);
+    border: 2px dashed var(--primary);
+    box-shadow: inset 0 0 10px rgba(37, 99, 235, 0.2);
+}
+
+.merge-success-message {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #10b981;
+    color: white;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    font-weight: 600;
+    z-index: 10000;
+    animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Make table rows cursor grab when draggable */
+.entities-table tbody tr {
+    cursor: grab;
+    transition: all 0.15s;
+}
+
+.entities-table tbody tr:hover {
+    background: var(--gray-50);
+}

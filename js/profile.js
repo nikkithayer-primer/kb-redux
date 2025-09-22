@@ -690,6 +690,26 @@ class EntityProfile {
             .attr('stroke', d => d.degree === 0 ? '#333' : '#fff')
             .attr('stroke-width', d => d.degree === 0 ? 2 : 2)
             .attr('opacity', d => d.degree === 2 ? 0.7 : 1)
+            .style('cursor', 'pointer')
+            .on('click', (event, d) => {
+                // Prevent drag from interfering with click
+                if (event.defaultPrevented) return;
+                this.navigateToEntity(d.id, d.type);
+            })
+            .on('mouseover', function(event, d) {
+                d3.select(this)
+                    .transition()
+                    .duration(200)
+                    .attr('r', d => (d.degree === 0 ? 16 : d.degree === 1 ? 10 : 7) * 1.2)
+                    .attr('stroke-width', 3);
+            })
+            .on('mouseout', function(event, d) {
+                d3.select(this)
+                    .transition()
+                    .duration(200)
+                    .attr('r', d => d.degree === 0 ? 16 : d.degree === 1 ? 10 : 7)
+                    .attr('stroke-width', d => d.degree === 0 ? 2 : 2);
+            })
             .call(d3.drag()
                 .on('start', dragstarted)
                 .on('drag', dragged)
@@ -706,7 +726,21 @@ class EntityProfile {
             .attr('font-weight', d => d.degree === 0 ? 'bold' : 'normal')
             .attr('fill', d => d.degree === 0 ? '#2c3e50' : '#333')
             .attr('text-anchor', 'middle')
-            .attr('dy', d => d.degree === 0 ? -20 : d.degree === 1 ? -15 : -12);
+            .attr('dy', d => d.degree === 0 ? -20 : d.degree === 1 ? -15 : -12)
+            .style('cursor', 'pointer')
+            .on('click', (event, d) => {
+                this.navigateToEntity(d.id, d.type);
+            })
+            .on('mouseover', function(event, d) {
+                d3.select(this)
+                    .style('text-decoration', 'underline')
+                    .style('fill', '#007bff');
+            })
+            .on('mouseout', function(event, d) {
+                d3.select(this)
+                    .style('text-decoration', 'none')
+                    .style('fill', d.degree === 0 ? '#2c3e50' : '#333');
+            });
         
         // Update positions on simulation tick
         simulation.on('tick', () => {
@@ -1701,6 +1735,22 @@ class EntityProfile {
 
     showError(message) {
         this.showStatus(message, 'error');
+    }
+
+    navigateToEntity(entityId, entityType) {
+        // Check if we're in the standalone profile.html page or embedded view
+        if (window.location.pathname.includes('profile.html')) {
+            // Standalone profile page - navigate to new profile
+            window.location.href = `profile.html?id=${entityId}&type=${entityType}`;
+        } else {
+            // Embedded in main app - check if KnowledgeBaseApp is available
+            if (window.app && typeof window.app.showProfile === 'function') {
+                window.app.showProfile(entityId, entityType);
+            } else {
+                // Fallback: navigate to standalone profile page
+                window.location.href = `profile.html?id=${entityId}&type=${entityType}`;
+            }
+        }
     }
 }
 

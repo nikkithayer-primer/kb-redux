@@ -78,6 +78,30 @@ export class CSVParser {
     parseEntities(entityString) {
         if (!entityString || entityString.trim() === '') return [];
         
+        // First split by conjunctions (and, &, plus)
+        const conjunctionPattern = /\s+(?:and|&|\+)\s+/i;
+        const conjunctionParts = entityString.split(conjunctionPattern);
+        
+        if (conjunctionParts.length > 1) {
+            // Multiple entities connected by conjunctions
+            const splitEntities = [];
+            
+            for (const part of conjunctionParts) {
+                // For each part, also check for comma-separated entities
+                const commaSplit = this.parseCommaSeparatedEntities(part.trim());
+                splitEntities.push(...commaSplit);
+            }
+            
+            return splitEntities;
+        }
+        
+        // No conjunctions found, just parse comma-separated entities
+        return this.parseCommaSeparatedEntities(entityString);
+    }
+
+    parseCommaSeparatedEntities(entityString) {
+        if (!entityString || entityString.trim() === '') return [];
+        
         // Handle comma-separated entities, being careful with locations like "Washington, D.C."
         const entities = [];
         const parts = entityString.split(',');

@@ -503,4 +503,255 @@ export class KnowledgeBaseApp {
             submitBtn.textContent = 'Add Entry';
         }
     }
+
+    async mergeEntities(draggedEntity, targetEntity) {
+        try {
+            console.log(`Merging ${draggedEntity.name} into ${targetEntity.name}`);
+
+            // 1. Load both entities from Firebase to get complete data
+            console.log('Step 1: Loading entity data...');
+            const draggedEntityData = await this.firebaseService.getEntityById(draggedEntity.id, draggedEntity.type);
+            const targetEntityData = await this.firebaseService.getEntityById(targetEntity.id, targetEntity.type);
+
+            if (!draggedEntityData || !targetEntityData) {
+                throw new Error(`Could not load entity data for merge. Dragged: ${!!draggedEntityData}, Target: ${!!targetEntityData}`);
+            }
+
+            console.log('Step 1 completed: Entity data loaded');
+
+            // 2. Find all events that reference the dragged entity
+            console.log('Step 2: Loading all events...');
+            const allEvents = await this.firebaseService.loadAllEvents();
+            console.log(`Loaded ${allEvents.length} total events`);
+            
+            const eventsToUpdate = allEvents.filter(event => {
+                try {
+                    const shouldUpdate = event.actor.includes(draggedEntity.name) || 
+                           (event.target && event.target.includes(draggedEntity.name)) ||
+                           (Array.isArray(event.locations) 
+                               ? event.locations.some(loc => (typeof loc === 'string' ? loc : loc.name) === draggedEntity.name)
+                               : event.locations && event.locations.includes(draggedEntity.name));
+                    
+                    if (shouldUpdate) {
+                        console.log('Event to update:', {
+                            id: event.id,
+                            firestoreId: event.firestoreId,
+                            actor: event.actor,
+                            target: event.target
+                        });
+                    }
+                    
+                    return shouldUpdate;
+                } catch (filterError) {
+                    console.error('Error filtering event:', event, filterError);
+                    return false;
+                }
+            });
+
+            console.log(`Step 2 completed: Found ${eventsToUpdate.length} events to update`);
+
+            // 3. Update events to reference the target entity instead
+            console.log('Step 3: Updating event references...');
+            const eventUpdates = eventsToUpdate.map(event => {
+                try {
+                    const updatedEvent = { ...event };
+                    
+                    // Replace in actor
+                    if (updatedEvent.actor && updatedEvent.actor.includes(draggedEntity.name)) {
+                        updatedEvent.actor = updatedEvent.actor.replace(draggedEntity.name, targetEntity.name);
+                    }
+                    
+                    // Replace in target
+                    if (updatedEvent.target && updatedEvent.target.includes(draggedEntity.name)) {
+                        updatedEvent.target = updatedEvent.target.replace(draggedEntity.name, targetEntity.name);
+                    }
+                    
+                    // Replace in locations
+                    if (Array.isArray(updatedEvent.locations)) {
+                        updatedEvent.locations = updatedEvent.locations.map(loc => {
+                            if (typeof loc === 'string') {
+                                return loc === draggedEntity.name ? targetEntity.name : loc;
+                            } else if (loc && loc.name === draggedEntity.name) {
+                                return { ...loc, name: targetEntity.name };
+                            }
+                            return loc;
+                        });
+                    } else if (updatedEvent.locations === draggedEntity.name) {
+                        updatedEvent.locations = targetEntity.name;
+                    }
+                    
+                    return updatedEvent;
+                } catch (updateError) {
+                    console.error('Error updating event:', event, updateError);
+                    throw updateError;
+                }
+            });
+
+            console.log('Step 3 completed: Event references updated');
+
+            // 4. Add dragged entity name as alias to target entity
+            console.log('Step 4: Updating target entity aliases...');
+            const updatedTargetEntity = { ...targetEntityData };
+            if (!updatedTargetEntity.aliases) {
+                updatedTargetEntity.aliases = [];
+            }
+            if (!updatedTargetEntity.aliases.includes(draggedEntity.name)) {
+                updatedTargetEntity.aliases.push(draggedEntity.name);
+            }
+            console.log('Step 4 completed: Aliases updated');
+
+            // 5. Perform the merge in Firebase
+            console.log('Step 5: Performing Firebase merge...');
+            await this.firebaseService.mergeEntities(
+                draggedEntity.id,
+                draggedEntity.type,
+                targetEntity.id,
+                targetEntity.type,
+                updatedTargetEntity,
+                eventUpdates
+            );
+            console.log('Step 5 completed: Firebase merge successful');
+
+            // 6. Update local data and refresh UI
+            console.log('Step 6: Updating local data and refreshing UI...');
+            this.updateLocalDataAfterMerge(draggedEntity, targetEntity, updatedTargetEntity, eventUpdates);
+            console.log('Step 6 completed: Local data updated and UI refreshed');
+
+            console.log('Entity merge completed successfully');
+
+        } catch (error) {
+            console.error('Error in mergeEntities:', error);
+            console.error('Error stack:', error.stack);
+            throw error;
+        }
+    }
+
+    updateLocalDataAfterMerge(draggedEntity, targetEntity, updatedTargetEntity, eventUpdates) {
+        try {
+            console.log('Updating local data after merge...');
+            
+            // Update the target entity in local storage
+            const collections = ['people', 'organizations', 'places', 'unknown'];
+            let removedEntity = null;
+            let updatedTargetIndex = -1;
+            let targetCollection = null;
+            
+            collections.forEach(collection => {
+                if (this.entityProcessor && this.entityProcessor.processedEntities && this.entityProcessor.processedEntities[collection]) {
+                    const entities = this.entityProcessor.processedEntities[collection];
+                    
+                    // Remove dragged entity
+                    const draggedIndex = entities.findIndex(e => e.id === draggedEntity.id);
+                    if (draggedIndex !== -1) {
+                        console.log(`Removing dragged entity from ${collection}:`, draggedEntity.name);
+                        removedEntity = entities.splice(draggedIndex, 1)[0];
+                    }
+                    
+                    // Update target entity
+                    const targetIndex = entities.findIndex(e => e.id === targetEntity.id);
+                    if (targetIndex !== -1) {
+                        console.log(`Updating target entity in ${collection}:`, targetEntity.name);
+                        entities[targetIndex] = updatedTargetEntity;
+                        updatedTargetIndex = targetIndex;
+                        targetCollection = collection;
+                    }
+                }
+            });
+
+            // Update events in local storage
+            if (this.entityProcessor.processedEntities.events) {
+                console.log('Updating local events...');
+                eventUpdates.forEach(updatedEvent => {
+                    const eventIndex = this.entityProcessor.processedEntities.events.findIndex(e => 
+                        e.firestoreId === updatedEvent.firestoreId || e.id === updatedEvent.id
+                    );
+                    if (eventIndex !== -1) {
+                        this.entityProcessor.processedEntities.events[eventIndex] = updatedEvent;
+                    }
+                });
+            }
+
+            // Recalculate connection counts for all entities
+            console.log('Recalculating connection counts...');
+            this.recalculateConnectionCounts();
+
+            // Skip full table refresh to preserve element references during merge
+            // The table manager will handle the specific row updates
+            console.log('Skipping full table refresh to preserve element references...');
+            
+            // Update statistics
+            this.updateStatistics();
+            
+            console.log('Local data update completed');
+            
+        } catch (error) {
+            console.error('Error updating local data after merge:', error);
+            throw error;
+        }
+    }
+
+    recalculateConnectionCounts() {
+        try {
+            const collections = ['people', 'organizations', 'places', 'unknown'];
+            const allEvents = this.entityProcessor.processedEntities.events || [];
+            
+            // Reset all connection counts
+            collections.forEach(collection => {
+                if (this.entityProcessor.processedEntities[collection]) {
+                    this.entityProcessor.processedEntities[collection].forEach(entity => {
+                        entity.connectionCount = 0;
+                        entity.connections = [];
+                    });
+                }
+            });
+            
+            // Recalculate based on current events
+            allEvents.forEach(event => {
+                // Count actor connections
+                if (event.actor) {
+                    this.incrementEntityConnectionCount(event.actor);
+                }
+                
+                // Count target connections
+                if (event.target) {
+                    this.incrementEntityConnectionCount(event.target);
+                }
+                
+                // Count location connections
+                if (event.locations) {
+                    if (Array.isArray(event.locations)) {
+                        event.locations.forEach(location => {
+                            const locationName = typeof location === 'string' ? location : location.name;
+                            if (locationName) {
+                                this.incrementEntityConnectionCount(locationName);
+                            }
+                        });
+                    } else if (typeof event.locations === 'string') {
+                        this.incrementEntityConnectionCount(event.locations);
+                    }
+                }
+            });
+            
+            console.log('Connection counts recalculated');
+            
+        } catch (error) {
+            console.error('Error recalculating connection counts:', error);
+        }
+    }
+
+    incrementEntityConnectionCount(entityName) {
+        const collections = ['people', 'organizations', 'places', 'unknown'];
+        
+        for (const collection of collections) {
+            if (this.entityProcessor.processedEntities[collection]) {
+                const entity = this.entityProcessor.processedEntities[collection].find(e => 
+                    e.name === entityName || (e.aliases && e.aliases.includes(entityName))
+                );
+                if (entity) {
+                    entity.connectionCount = (entity.connectionCount || 0) + 1;
+                    return; // Found and updated, no need to check other collections
+                }
+            }
+        }
+    }
 }
