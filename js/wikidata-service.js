@@ -20,7 +20,7 @@ export class WikidataService {
             
             // Add timeout to prevent hanging
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000); // Reduced to 5 second timeout
+            const timeoutId = setTimeout(() => controller.abort(), 3000); // Further reduced to 3 second timeout
             
             try {
                 const response = await fetch(searchUrl, { signal: controller.signal });
@@ -35,7 +35,7 @@ export class WikidataService {
                     const detailUrl = `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${firstMatch.id}&format=json&origin=*`;
                     
                     const detailController = new AbortController();
-                    const detailTimeoutId = setTimeout(() => detailController.abort(), 5000);
+                    const detailTimeoutId = setTimeout(() => detailController.abort(), 3000);
                     
                     try {
                         const detailResponse = await fetch(detailUrl, { signal: detailController.signal });
@@ -146,16 +146,6 @@ export class WikidataService {
                 result.aliases = await this.resolveWikidataPropertyArray(entity.claims.P1449);
             }
 
-            // Languages spoken (P1412) - for people
-            if (entity.claims.P1412) {
-                result.languages_spoken = await this.resolveWikidataPropertyArray(entity.claims.P1412);
-            }
-
-            // Employer (P108) - for people
-            if (entity.claims.P108) {
-                result.employer = await this.resolveWikidataPropertyArray(entity.claims.P108);
-            }
-
             // Educated at (P69) - for people
             if (entity.claims.P69) {
                 result.educated_at = await this.resolveWikidataPropertyArray(entity.claims.P69);
@@ -169,49 +159,6 @@ export class WikidataService {
             // Member of (P463) - for people/organizations
             if (entity.claims.P463) {
                 result.member_of = await this.resolveWikidataPropertyArray(entity.claims.P463);
-            }
-
-            // Family relationships
-            const familyRelations = {};
-            
-            // Father (P22)
-            if (entity.claims.P22) {
-                familyRelations.father = await this.resolveWikidataPropertyArray(entity.claims.P22);
-            }
-            
-            // Mother (P25)
-            if (entity.claims.P25) {
-                familyRelations.mother = await this.resolveWikidataPropertyArray(entity.claims.P25);
-            }
-            
-            // Spouse (P26)
-            if (entity.claims.P26) {
-                familyRelations.spouse = await this.resolveWikidataPropertyArray(entity.claims.P26);
-            }
-            
-            // Child (P40)
-            if (entity.claims.P40) {
-                familyRelations.children = await this.resolveWikidataPropertyArray(entity.claims.P40);
-            }
-            
-            // Sibling (P3373)
-            if (entity.claims.P3373) {
-                familyRelations.siblings = await this.resolveWikidataPropertyArray(entity.claims.P3373);
-            }
-            
-            // Parent (P8810) - general parent property
-            if (entity.claims.P8810) {
-                familyRelations.parents = await this.resolveWikidataPropertyArray(entity.claims.P8810);
-            }
-            
-            // Relative (P1038) - general relative property
-            if (entity.claims.P1038) {
-                familyRelations.relatives = await this.resolveWikidataPropertyArray(entity.claims.P1038);
-            }
-
-            // Only add family_relations if there are any relationships
-            if (Object.keys(familyRelations).length > 0) {
-                result.family_relations = familyRelations;
             }
 
             // Country (P17) - for places
@@ -230,23 +177,56 @@ export class WikidataService {
                 }
             }
 
-            // Population (P1082) - for places
-            if (entity.claims.P1082) {
-                const population = this.extractClaimValue(entity.claims.P1082[0]);
-                if (population) {
-                    result.population = parseInt(population.replace(/^\+/, ''));
-                }
-            }
-
             // Date of birth (P569) - for people
             if (entity.claims.P569) {
                 result.dateOfBirth = this.extractClaimValue(entity.claims.P569[0]);
             }
 
-            // Founded date (P571) - for organizations
-            if (entity.claims.P571) {
-                result.founded = this.extractClaimValue(entity.claims.P571[0]);
+            // Languages spoken (P1412) - for people
+            if (entity.claims.P1412) {
+                result.languages_spoken = await this.resolveWikidataPropertyArray(entity.claims.P1412);
             }
+
+            // Employer (P108) - for people
+            if (entity.claims.P108) {
+                result.employer = await this.resolveWikidataPropertyArray(entity.claims.P108);
+            }
+
+            // Population (P1082) - for places
+            if (entity.claims.P1082) {
+                result.population = this.extractClaimValue(entity.claims.P1082[0]);
+            }
+
+            // Family relations
+            // Spouse (P26)
+            if (entity.claims.P26) {
+                result.spouse = await this.resolveWikidataPropertyArray(entity.claims.P26);
+            }
+
+            // Children (P40)
+            if (entity.claims.P40) {
+                result.children = await this.resolveWikidataPropertyArray(entity.claims.P40);
+            }
+
+            // Father (P22) and Mother (P25) - combine into parents
+            const parents = [];
+            if (entity.claims.P22) {
+                const fathers = await this.resolveWikidataPropertyArray(entity.claims.P22);
+                parents.push(...fathers);
+            }
+            if (entity.claims.P25) {
+                const mothers = await this.resolveWikidataPropertyArray(entity.claims.P25);
+                parents.push(...mothers);
+            }
+            if (parents.length > 0) {
+                result.parents = parents;
+            }
+
+            // Siblings (P3373)
+            if (entity.claims.P3373) {
+                result.siblings = await this.resolveWikidataPropertyArray(entity.claims.P3373);
+            }
+
         }
 
         return result;
@@ -257,7 +237,7 @@ export class WikidataService {
             const value = this.extractClaimValue(claim);
             if (value && typeof value === 'string' && value.match(/^Q\d+$/)) {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+                const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
                 
                 try {
                     const response = await fetch(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${value}&format=json&origin=*&props=labels`, { signal: controller.signal });

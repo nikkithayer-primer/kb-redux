@@ -1,5 +1,9 @@
 // Entity processing and management
 
+import { LRUCache } from './lru-cache.js';
+import { errorHandler } from './error-handler.js';
+import { loadingManager } from './loading-manager.js';
+
 export class EntityProcessor {
     constructor(wikidataService, firebaseService, dateTimeProcessor) {
         this.wikidataService = wikidataService;
@@ -13,10 +17,14 @@ export class EntityProcessor {
             events: []
         };
         
-        // Caching systems for performance optimization
-        this.entityCache = new Map(); // Cache for Firebase entity lookups
-        this.wikidataCache = new Map(); // Cache for Wikidata API calls
-        this.nameVariationCache = new Map(); // Cache for name variations
+        // Enhanced caching systems with memory management
+        this.entityCache = new LRUCache(500, 10); // 500 items, 10MB max
+        this.wikidataCache = new LRUCache(1000, 20); // 1000 items, 20MB max
+        this.nameVariationCache = new LRUCache(2000, 5); // 2000 items, 5MB max
+        
+        // Memory monitoring
+        this.lastMemoryCheck = Date.now();
+        this.memoryCheckInterval = 60000; // Check every minute
     }
 
     async processEntity(entityName, role, event) {
@@ -61,17 +69,29 @@ export class EntityProcessor {
             let wikidataInfo = null;
             
             // Check Wikidata cache first
-            if (this.wikidataCache.has(locationName)) {
-                wikidataInfo = this.wikidataCache.get(locationName);
+            const cachedLocationData = this.wikidataCache.get(locationName);
+            if (cachedLocationData !== undefined) { // Use undefined check to allow null cache hits
+                wikidataInfo = cachedLocationData;
             } else {
                 try {
-                    wikidataInfo = await this.wikidataService.searchWikidata(locationName);
+                    // Add timeout wrapper for location Wikidata calls
+                    wikidataInfo = await Promise.race([
+                        this.wikidataService.searchWikidata(locationName),
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Location Wikidata search timeout')), 8000)
+                        )
+                    ]);
                     // Cache the result for future use
                     this.wikidataCache.set(locationName, wikidataInfo);
                 } catch (error) {
-                    console.warn('EntityProcessor: Wikidata search failed for location', locationName, error);
+                    if (error.message === 'Location Wikidata search timeout') {
+                        console.warn(`Location Wikidata search timeout for: ${locationName}`);
+                    } else {
+                        console.warn('EntityProcessor: Wikidata search failed for location', locationName, error);
+                    }
                     // Cache null results to avoid repeated failed API calls
                     this.wikidataCache.set(locationName, null);
+                    wikidataInfo = null;
                 }
             }
             
@@ -120,19 +140,42 @@ export class EntityProcessor {
         let wikidataInfo = null;
         
         // Check Wikidata cache first
-        if (this.wikidataCache.has(entityName)) {
-            wikidataInfo = this.wikidataCache.get(entityName);
+        const cachedWikidata = this.wikidataCache.get(entityName);
+        if (cachedWikidata !== undefined) { // Use undefined check to allow null cache hits
+            wikidataInfo = cachedWikidata;
         } else {
             try {
-                wikidataInfo = await this.wikidataService.searchWikidata(entityName);
+                // Add timeout wrapper for Wikidata calls
+                wikidataInfo = await Promise.race([
+                    errorHandler.withErrorHandling(
+                        () => this.wikidataService.searchWikidata(entityName),
+                        { operation: 'wikidata_search', entityName }
+                    ),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Wikidata search timeout')), 8000) // 8 second timeout
+                    )
+                ]);
+                
                 // Cache the result for future use
                 this.wikidataCache.set(entityName, wikidataInfo);
             } catch (error) {
-                console.warn('EntityProcessor: Wikidata search failed for', entityName, error);
+                if (error.message === 'Wikidata search timeout') {
+                    console.warn(`Wikidata search timeout for entity: ${entityName}`);
+                } else {
+                    errorHandler.handleError(error, { 
+                        operation: 'wikidata_search', 
+                        entityName,
+                        severity: errorHandler.constructor.Severity.LOW 
+                    });
+                }
                 // Cache null results to avoid repeated failed API calls
                 this.wikidataCache.set(entityName, null);
+                wikidataInfo = null;
             }
         }
+        
+        // Check memory usage periodically
+        this.checkMemoryUsage();
         
         const entity = {
             id: `entity_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -552,10 +595,28 @@ export class EntityProcessor {
         
         const fields = {};
         
+        // Basic fields
         if (wikidataInfo.occupation) fields.occupation = wikidataInfo.occupation;
         if (wikidataInfo.dateOfBirth) fields.dateOfBirth = wikidataInfo.dateOfBirth;
         if (wikidataInfo.country) fields.country = wikidataInfo.country;
         if (wikidataInfo.founded) fields.founded = wikidataInfo.founded;
+        if (wikidataInfo.instance_of) fields.instance_of = wikidataInfo.instance_of;
+        
+        // Enhanced fields that were being fetched but not saved
+        if (wikidataInfo.aliases) fields.aliases = wikidataInfo.aliases;
+        if (wikidataInfo.educated_at) fields.educated_at = wikidataInfo.educated_at;
+        if (wikidataInfo.residences) fields.residences = wikidataInfo.residences;
+        if (wikidataInfo.member_of) fields.member_of = wikidataInfo.member_of;
+        if (wikidataInfo.languages_spoken) fields.languages_spoken = wikidataInfo.languages_spoken;
+        if (wikidataInfo.employer) fields.employer = wikidataInfo.employer;
+        if (wikidataInfo.coordinates) fields.coordinates = wikidataInfo.coordinates;
+        if (wikidataInfo.population) fields.population = wikidataInfo.population;
+        
+        // Family relations
+        if (wikidataInfo.spouse) fields.spouse = wikidataInfo.spouse;
+        if (wikidataInfo.children) fields.children = wikidataInfo.children;
+        if (wikidataInfo.parents) fields.parents = wikidataInfo.parents;
+        if (wikidataInfo.siblings) fields.siblings = wikidataInfo.siblings;
         
         return fields;
     }
@@ -569,5 +630,75 @@ export class EntityProcessor {
         if (wikidataInfo.population) fields.population = wikidataInfo.population;
         
         return fields;
+    }
+
+    // Memory management methods
+    checkMemoryUsage() {
+        const now = Date.now();
+        if (now - this.lastMemoryCheck < this.memoryCheckInterval) {
+            return;
+        }
+        
+        this.lastMemoryCheck = now;
+        
+        const entityCacheStats = this.entityCache.getStats();
+        const wikidataCacheStats = this.wikidataCache.getStats();
+        const nameCacheStats = this.nameVariationCache.getStats();
+        
+        console.log('EntityProcessor Cache Stats:', {
+            entityCache: entityCacheStats,
+            wikidataCache: wikidataCacheStats,
+            nameVariationCache: nameCacheStats,
+            totalMemoryMB: (
+                parseFloat(entityCacheStats.memory.mb) + 
+                parseFloat(wikidataCacheStats.memory.mb) + 
+                parseFloat(nameCacheStats.memory.mb)
+            ).toFixed(2)
+        });
+        
+        // Force cleanup if memory usage is high
+        const totalMemoryPercentage = 
+            parseFloat(entityCacheStats.memory.percentage) +
+            parseFloat(wikidataCacheStats.memory.percentage) +
+            parseFloat(nameCacheStats.memory.percentage);
+            
+        if (totalMemoryPercentage > 80) {
+            console.warn('EntityProcessor: High memory usage detected, forcing cache cleanup');
+            this.clearOldCaches();
+        }
+    }
+
+    clearOldCaches() {
+        // Clear oldest entries from all caches
+        const entitiesToClear = Math.floor(this.entityCache.size() * 0.2);
+        const wikidataToCache = Math.floor(this.wikidataCache.size() * 0.2);
+        const namesToClear = Math.floor(this.nameVariationCache.size() * 0.2);
+        
+        for (let i = 0; i < entitiesToClear; i++) {
+            this.entityCache.cleanup();
+        }
+        for (let i = 0; i < wikidataToCache; i++) {
+            this.wikidataCache.cleanup();
+        }
+        for (let i = 0; i < namesToClear; i++) {
+            this.nameVariationCache.cleanup();
+        }
+        
+        console.log('EntityProcessor: Cache cleanup completed');
+    }
+
+    getMemoryStats() {
+        return {
+            entityCache: this.entityCache.getStats(),
+            wikidataCache: this.wikidataCache.getStats(),
+            nameVariationCache: this.nameVariationCache.getStats(),
+            processedEntitiesCount: {
+                people: this.processedEntities.people.length,
+                organizations: this.processedEntities.organizations.length,
+                places: this.processedEntities.places.length,
+                unknown: this.processedEntities.unknown.length,
+                events: this.processedEntities.events.length
+            }
+        };
     }
 }

@@ -674,6 +674,20 @@
     font-size: 10px;
 }
 
+.event-sources {
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    font-style: italic;
+    margin-left: var(--space-2);
+    opacity: 0.8;
+}
+
+.event-sources::before {
+    content: '📄';
+    margin-right: var(--space-1);
+    font-size: 10px;
+}
+
 /* Empty state */
 .events-empty {
     text-align: center;

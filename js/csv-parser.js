@@ -132,6 +132,14 @@ export class CSVParser {
         }));
     }
 
+    parseSources(sourceString) {
+        if (!sourceString || sourceString.trim() === '') return [];
+        
+        // Parse sources similar to entities, but return as simple array
+        const sources = this.parseEntities(sourceString);
+        return sources.filter(source => source && source.trim() !== '');
+    }
+
     classifyLocation(locationName) {
         const name = locationName.toLowerCase();
         

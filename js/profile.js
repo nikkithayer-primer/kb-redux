@@ -478,9 +478,7 @@ class EntityProfile {
                 'organization', 'educatedAt', 'currentResidence', 'previousResidences',
                 'dateOfBirth', 'gender', 'expertise', 'industry', 'founded', 'employees',
                 'location', 'country', 'state', 'population', 'coordinates', 'connections',
-                'created', 'updated', 'lastModified',
-                // New Wikidata fields
-                'employer', 'educated_at', 'residences', 'languages_spoken', 'member_of', 'family_relations'
+                'created', 'updated', 'lastModified', 'connectionCount', 'actualConnectionCount'
             ];
             
             if (!skipFields.includes(key) && entity[key] !== null && entity[key] !== undefined && entity[key] !== '') {
@@ -699,12 +697,18 @@ class EntityProfile {
                 ? event.locations.map(loc => typeof loc === 'string' ? loc : loc.name).filter(l => l).join(', ')
                 : event.locations || '';
             
+            // Format sources
+            const sourcesText = Array.isArray(event.sources) && event.sources.length > 0
+                ? event.sources.join(', ')
+                : '';
+            
             eventItem.innerHTML = `
                 <div class="event-date">${dateString}</div>
                 <div class="event-sentence">${event.sentence || 'No description available'}</div>
                 <div class="event-meta">
                     <span class="event-action ${role}">${role}</span>
                     ${locationText ? `<span class="event-location">${locationText}</span>` : ''}
+                    ${sourcesText ? `<span class="event-sources">Sources: ${sourcesText}</span>` : ''}
                 </div>
             `;
             

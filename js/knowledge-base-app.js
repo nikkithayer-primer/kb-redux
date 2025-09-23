@@ -8,6 +8,8 @@ import { EntityProcessor } from './entity-processor.js';
 import { TableManager } from './table-manager.js';
 import { EntityProfile } from './profile.js';
 import { DeduplicationService } from './deduplication-service.js';
+import { errorHandler } from './error-handler.js';
+import { loadingManager } from './loading-manager.js';
 
 export class KnowledgeBaseApp {
     constructor() {
@@ -80,33 +82,87 @@ export class KnowledgeBaseApp {
             return;
         }
 
+        const operationId = 'process_data';
+        
         try {
-            this.showStatus('Processing data...', 'info');
+            const totalRows = this.csvParser.rawData.length;
+            
+            // Start loading with cancellation support and longer timeout
+            const abortController = new AbortController();
+            loadingManager.startOperation(operationId, {
+                status: `Processing ${totalRows} rows...`,
+                cancellable: true,
+                timeout: Math.max(120000, totalRows * 2000), // Dynamic timeout: 2 seconds per row, minimum 2 minutes
+                onCancel: () => abortController.abort()
+            });
+
             let processedRows = 0;
             let skippedDuplicates = 0;
-            const totalRows = this.csvParser.rawData.length;
+            const batchSize = 5; // Process rows in smaller batches
 
-            for (const row of this.csvParser.rawData) {
-                try {
-                    await this.processRow(row);
-                    processedRows++;
-                } catch (rowError) {
-                    console.error(`Error processing row ${processedRows + 1}:`, rowError);
-                    processedRows++; // Still increment to avoid infinite loop
+            // Process rows in batches to prevent timeout and provide better progress feedback
+            for (let i = 0; i < this.csvParser.rawData.length; i += batchSize) {
+                // Check for cancellation
+                if (abortController.signal.aborted) {
+                    throw new Error('Operation cancelled by user');
                 }
-                
-                if (processedRows % 5 === 0) {
-                    this.showStatus(`Processing... ${processedRows}/${totalRows} rows`, 'info');
+
+                const batch = this.csvParser.rawData.slice(i, i + batchSize);
+                const batchPromises = batch.map(async (row, batchIndex) => {
+                    try {
+                        await this.processRow(row);
+                        return { success: true, index: i + batchIndex };
+                    } catch (rowError) {
+                        errorHandler.handleError(rowError, { 
+                            operation: 'process_row', 
+                            rowIndex: i + batchIndex + 1,
+                            severity: errorHandler.constructor.Severity.LOW 
+                        });
+                        return { success: false, index: i + batchIndex, error: rowError };
+                    }
+                });
+
+                // Process batch with timeout protection
+                try {
+                    const batchResults = await Promise.allSettled(batchPromises);
+                    processedRows += batchResults.length;
+                    
+                    // Update progress after each batch
+                    const progress = (processedRows / totalRows) * 75; // Reserve 25% for saving and UI
+                    loadingManager.updateProgress(operationId, progress, 
+                        `Processed ${processedRows}/${totalRows} rows (batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(totalRows/batchSize)})`);
+                    
+                    // Brief pause to prevent overwhelming the system
+                    if (i + batchSize < this.csvParser.rawData.length) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                    
+                } catch (batchError) {
+                    console.warn(`Batch processing error for rows ${i}-${i + batchSize - 1}:`, batchError);
+                    processedRows += batch.length; // Still count as processed to avoid infinite loop
                 }
             }
-            this.showStatus('Saving to Firebase...', 'info');
+            
+            // Save to Firebase
+            loadingManager.updateProgress(operationId, 75, 'Saving to database...');
             await this.saveToFirebase();
             
-            this.showStatus(`Processing complete! Processed ${processedRows} rows, skipped ${skippedDuplicates} duplicates.`, 'success');
+            // Update UI
+            loadingManager.updateProgress(operationId, 90, 'Updating interface...');
             this.renderEntities();
+            
+            // Complete operation
+            loadingManager.completeOperation(operationId);
+            
+            this.showStatus(`Processing complete! Processed ${processedRows} rows, skipped ${skippedDuplicates} duplicates.`, 'success');
+            
         } catch (error) {
-            this.showStatus('Error processing data: ' + error.message, 'error');
-            console.error('Error processing data:', error);
+            loadingManager.completeOperation(operationId);
+            
+            errorHandler.handleError(error, { 
+                operation: 'process_data',
+                severity: errorHandler.constructor.Severity.HIGH 
+            });
         }
     }
 
@@ -136,7 +192,8 @@ export class KnowledgeBaseApp {
             sentence: row.Sentence,
             dateReceived: dateReceived,
             processedDatetime: processedDatetime,
-            locations: row.Locations ? this.csvParser.parseLocations(row.Locations) : []
+            locations: row.Locations ? this.csvParser.parseLocations(row.Locations) : [],
+            sources: row.Source ? this.csvParser.parseSources(row.Source) : []
         };
 
         // Check for duplicate events
@@ -152,15 +209,22 @@ export class KnowledgeBaseApp {
         // Add to processed events
         this.entityProcessor.processedEntities.events.push(event);
 
-        // Process all entities in parallel for better performance
+        // Process all entities in parallel for better performance with timeout protection
         const entityPromises = [];
 
         // Process actors
         const actors = this.csvParser.parseEntities(row.Actor);
         actors.forEach(actor => {
             entityPromises.push(
-                this.entityProcessor.processEntity(actor, 'actor', event)
-                    .catch(error => console.error('Error processing actor:', error))
+                Promise.race([
+                    this.entityProcessor.processEntity(actor, 'actor', event),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error(`Actor processing timeout: ${actor}`)), 15000)
+                    )
+                ]).catch(error => {
+                    console.error('Error processing actor:', actor, error.message);
+                    return null; // Return null to continue processing
+                })
             );
         });
 
@@ -169,8 +233,15 @@ export class KnowledgeBaseApp {
             const targets = this.csvParser.parseEntities(row.Target);
             targets.forEach(target => {
                 entityPromises.push(
-                    this.entityProcessor.processEntity(target, 'target', event)
-                        .catch(error => console.error('Error processing target:', error))
+                    Promise.race([
+                        this.entityProcessor.processEntity(target, 'target', event),
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error(`Target processing timeout: ${target}`)), 15000)
+                        )
+                    ]).catch(error => {
+                        console.error('Error processing target:', target, error.message);
+                        return null; // Return null to continue processing
+                    })
                 );
             });
         }
@@ -180,14 +251,31 @@ export class KnowledgeBaseApp {
             const locations = this.csvParser.parseLocations(row.Locations);
             locations.forEach(location => {
                 entityPromises.push(
-                    this.entityProcessor.processLocationEntity(location.name, event)
-                        .catch(error => console.error('Error processing location:', error))
+                    Promise.race([
+                        this.entityProcessor.processLocationEntity(location.name, event),
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error(`Location processing timeout: ${location.name}`)), 15000)
+                        )
+                    ]).catch(error => {
+                        console.error('Error processing location:', location.name, error.message);
+                        return null; // Return null to continue processing
+                    })
                 );
             });
         }
 
-        // Wait for all entity processing to complete
-        await Promise.all(entityPromises);
+        // Wait for all entity processing to complete with overall timeout
+        try {
+            await Promise.race([
+                Promise.allSettled(entityPromises),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Row processing timeout')), 30000) // 30 second timeout for entire row
+                )
+            ]);
+        } catch (error) {
+            console.warn(`Row processing timeout or error for row with actor: ${row.Actor}`, error);
+            // Continue processing even if some entities fail
+        }
     }
 
     async saveToFirebase() {
@@ -212,22 +300,48 @@ export class KnowledgeBaseApp {
     }
 
     async loadExistingData() {
+        const operationId = 'load_existing_data';
+        
         try {
-            this.showStatus('Loading existing data...', 'info');
-            const existingData = await this.firebaseService.loadExistingData();
+            loadingManager.startOperation(operationId, {
+                status: 'Loading existing data...',
+                cancellable: false,
+                timeout: 15000 // 15 second timeout
+            });
             
-            // Update entity processor with existing data
-            this.entityProcessor.processedEntities = existingData;
+            const existingData = await errorHandler.withErrorHandling(
+                () => this.firebaseService.loadExistingData(),
+                { operation: 'firebase_load', source: 'initialization' }
+            );
             
-            // Update table
-            this.renderEntities();
-            
-            if (existingData.people.length + existingData.organizations.length + existingData.places.length + existingData.unknown.length > 0) {
-                this.showStatus(`Loaded existing data: ${existingData.people.length} people, ${existingData.organizations.length} organizations, ${existingData.places.length} places, ${existingData.unknown.length} unknown`, 'success');
+            if (existingData) {
+                loadingManager.updateProgress(operationId, 70, 'Processing loaded data...');
+                
+                // Update entity processor with existing data
+                this.entityProcessor.processedEntities = existingData;
+                
+                loadingManager.updateProgress(operationId, 90, 'Updating interface...');
+                
+                // Update table
+                this.renderEntities();
+                
+                const totalEntities = existingData.people.length + existingData.organizations.length + 
+                                    existingData.places.length + existingData.unknown.length;
+                
+                if (totalEntities > 0) {
+                    this.showStatus(`Loaded existing data: ${existingData.people.length} people, ${existingData.organizations.length} organizations, ${existingData.places.length} places, ${existingData.unknown.length} unknown`, 'success');
+                }
             }
+            
+            loadingManager.completeOperation(operationId);
+            
         } catch (error) {
-            console.error('Error loading existing data:', error);
-            this.showStatus('Error loading existing data', 'error');
+            loadingManager.completeOperation(operationId);
+            
+            errorHandler.handleError(error, { 
+                operation: 'load_existing_data',
+                severity: errorHandler.constructor.Severity.MEDIUM 
+            });
         }
     }
 
@@ -319,22 +433,36 @@ export class KnowledgeBaseApp {
     }
 
     async runDeduplication() {
+        const operationId = 'deduplication';
+        const deduplicationBtn = document.getElementById('deduplicationBtn');
+        const originalText = deduplicationBtn.textContent;
+        
         try {
             // Disable the button during processing
-            const deduplicationBtn = document.getElementById('deduplicationBtn');
-            const originalText = deduplicationBtn.textContent;
             deduplicationBtn.disabled = true;
             deduplicationBtn.textContent = 'Checking for duplicates...';
 
-            this.showStatus('Analyzing entities for duplicates...', 'info');
+            const abortController = new AbortController();
+            loadingManager.startOperation(operationId, {
+                status: 'Analyzing entities for duplicates...',
+                cancellable: true,
+                timeout: 120000, // 2 minute timeout
+                onCancel: () => abortController.abort()
+            });
 
             // Get preview of what will be deduplicated
-            const preview = await this.deduplicationService.getDeduplicationPreview();
+            const preview = await errorHandler.withErrorHandling(
+                () => this.deduplicationService.getDeduplicationPreview(),
+                { operation: 'deduplication_preview', source: 'user_action' }
+            );
             
-            if (preview.totalDuplicatesToRemove === 0) {
+            if (abortController.signal.aborted) {
+                throw new Error('Deduplication cancelled by user');
+            }
+            
+            if (!preview || preview.totalDuplicatesToRemove === 0) {
+                loadingManager.completeOperation(operationId);
                 this.showStatus('No duplicates found with matching Wikidata IDs', 'success');
-                deduplicationBtn.disabled = false;
-                deduplicationBtn.textContent = originalText;
                 return;
             }
 
@@ -342,32 +470,46 @@ export class KnowledgeBaseApp {
             const confirmMessage = `Found ${preview.totalDuplicatesToRemove} duplicate entities to remove.\n\nThis will:\n- Keep the oldest entity in each duplicate group\n- Merge all connections and events to the kept entity\n- Delete the duplicate entities\n\nProceed with deduplication?`;
             
             if (!confirm(confirmMessage)) {
+                loadingManager.completeOperation(operationId);
                 this.showStatus('Deduplication cancelled', 'info');
-                deduplicationBtn.disabled = false;
-                deduplicationBtn.textContent = originalText;
                 return;
             }
 
             // Run deduplication
+            loadingManager.updateProgress(operationId, 30, 'Removing duplicates...');
             deduplicationBtn.textContent = 'Removing duplicates...';
-            this.showStatus('Running deduplication process...', 'info');
 
-            const result = await this.deduplicationService.runDeduplication();
+            const result = await errorHandler.withErrorHandling(
+                () => this.deduplicationService.runDeduplication(),
+                { operation: 'deduplication_execution', source: 'user_action' }
+            );
 
-            // Show success message
-            this.showStatus(`Deduplication complete! Removed ${result.duplicatesRemoved} duplicate entities from ${result.duplicateGroupsFound} groups.`, 'success');
+            if (abortController.signal.aborted) {
+                throw new Error('Deduplication cancelled by user');
+            }
 
             // Refresh the table to show updated data
+            loadingManager.updateProgress(operationId, 80, 'Refreshing data...');
             await this.loadExistingData();
 
+            loadingManager.completeOperation(operationId);
+            
+            // Show success message
+            if (result) {
+                this.showStatus(`Deduplication complete! Removed ${result.duplicatesRemoved} duplicate entities from ${result.duplicateGroupsFound} groups.`, 'success');
+            }
+
         } catch (error) {
-            console.error('Error during deduplication:', error);
-            this.showStatus('Error during deduplication: ' + error.message, 'error');
+            loadingManager.completeOperation(operationId);
+            
+            errorHandler.handleError(error, { 
+                operation: 'deduplication',
+                severity: errorHandler.constructor.Severity.HIGH 
+            });
         } finally {
             // Re-enable the button
-            const deduplicationBtn = document.getElementById('deduplicationBtn');
             deduplicationBtn.disabled = false;
-            deduplicationBtn.textContent = 'Remove Duplicates';
+            deduplicationBtn.textContent = originalText;
         }
     }
 
@@ -464,6 +606,7 @@ export class KnowledgeBaseApp {
                 Sentence: document.getElementById('manualSentence').value.trim(),
                 'Date Received': document.getElementById('manualDateReceived').value,
                 Locations: document.getElementById('manualLocations').value.trim(),
+                Source: document.getElementById('manualSources').value.trim(),
                 DateTime: document.getElementById('manualDateTime').value
             };
 
