@@ -22,7 +22,6 @@ export class FirebaseService {
                 await addDoc(collection(this.db, collectionName), sanitizedEntity);
             }
         } catch (error) {
-            console.error(`Error saving ${collectionName.slice(0, -1)} ${entity.name}:`, error);
             throw error;
         }
     }
@@ -32,7 +31,6 @@ export class FirebaseService {
             const sanitizedEvent = this.sanitizeDataForFirebase(event);
             await addDoc(collection(this.db, 'events'), sanitizedEvent);
         } catch (error) {
-            console.error('Error saving event:', error);
             throw error;
         }
     }
@@ -72,7 +70,7 @@ export class FirebaseService {
                 }
             }
         } catch (error) {
-            console.warn('Error searching Firebase for entity:', name, error);
+            // Silently handle error
         }
         
         return null;
@@ -95,7 +93,7 @@ export class FirebaseService {
                 }
             }
         } catch (error) {
-            console.warn('Error checking for duplicate events in Firebase:', error);
+            // Silently handle error
         }
         return null;
     }
@@ -131,7 +129,6 @@ export class FirebaseService {
         
         if (data instanceof Date) {
             if (isNaN(data.getTime())) {
-                console.warn('Invalid date detected, converting to null:', data);
                 return null;
             }
             return data;
@@ -162,11 +159,9 @@ export class FirebaseService {
             // Helper function to create a new batch when needed
             const createNewBatch = () => {
                 if (operationCount > 0) {
-                    console.log(`Creating new batch. Current batch has ${operationCount} operations. Total batches: ${batches.length + 1}`);
                     batches.push(currentBatch);
                 }
                 const newBatch = writeBatch(this.db);
-                console.log(`New batch created. Total batches: ${batches.length}`);
                 return newBatch;
             };
 
@@ -184,7 +179,6 @@ export class FirebaseService {
                     
                     if (entity.firestoreId && entity.firestoreCollection) {
                         // Update existing entity - only if it was loaded from Firebase
-                        console.log(`Updating existing entity: ${entity.name} (${entity.firestoreId})`);
                         const entityRef = doc(this.db, collectionName, entity.firestoreId);
                         const updateData = { ...sanitizedEntity };
                         delete updateData.firestoreId;
@@ -192,14 +186,12 @@ export class FirebaseService {
                         currentBatch.update(entityRef, updateData);
                     } else {
                         // Add new entity - generate new document reference
-                        console.log(`Creating new entity: ${entity.name}`);
                         const entityRef = doc(collection(this.db, collectionName));
                         currentBatch.set(entityRef, sanitizedEntity);
                         
                         // Set the firestoreId for future reference
                         entity.firestoreId = entityRef.id;
                         entity.firestoreCollection = collectionName;
-                        console.log(`Assigned new firestoreId: ${entity.firestoreId} to ${entity.name}`);
                     }
                     operationCount++;
                 }
@@ -224,28 +216,20 @@ export class FirebaseService {
             }
 
             // Execute all batches
-            console.log(`Executing ${batches.length} batch(es)...`);
             try {
                 const commitPromises = batches.map((b, index) => {
-                    console.log(`Committing batch ${index + 1}/${batches.length} with ${b._mutations ? b._mutations.length : 'unknown'} operations`);
-                    return b.commit().then(() => {
-                        console.log(`Batch ${index + 1} committed successfully`);
-                    }).catch((error) => {
-                        console.error(`Error committing batch ${index + 1}:`, error);
+                    return b.commit().catch((error) => {
                         throw error;
                     });
                 });
                 
                 await Promise.all(commitPromises);
-                console.log(`All ${batches.length} batches committed successfully`);
             } catch (batchError) {
-                console.error('Error committing batches:', batchError);
                 throw batchError;
             }
             
             return { success: true, batchCount: batches.length };
         } catch (error) {
-            console.error('Error in batch save:', error);
             throw error;
         }
     }
@@ -282,7 +266,6 @@ export class FirebaseService {
 
             return data;
         } catch (error) {
-            console.error('Error loading existing data:', error);
             return {
                 people: [],
                 organizations: [],
@@ -329,7 +312,6 @@ export class FirebaseService {
                 hasMore: entities.length === pageSize
             };
         } catch (error) {
-            console.error(`Error loading paginated ${collectionName}:`, error);
             return { entities: [], lastDoc: null, hasMore: false };
         }
     }
@@ -375,15 +357,12 @@ export class FirebaseService {
                 hasMore: events.length === pageSize
             };
         } catch (error) {
-            console.error('Error loading paginated events:', error);
             return { events: [], lastDoc: null, hasMore: false };
         }
     }
 
     async exportAllData() {
         try {
-            console.log('Exporting all knowledge base data...');
-            
             const collections = ['people', 'organizations', 'places', 'unknown'];
             const exportData = {
                 entities: {},
@@ -400,8 +379,6 @@ export class FirebaseService {
                     firestoreId: doc.id,
                     ...doc.data()
                 }));
-                
-                console.log(`Exported ${exportData.entities[collectionName].length} ${collectionName}`);
             }
 
             // Load all events
@@ -414,19 +391,15 @@ export class FirebaseService {
                 ...doc.data()
             }));
             
-            console.log(`Exported ${exportData.events.length} events`);
-            
             return exportData;
 
         } catch (error) {
-            console.error('Error exporting all data:', error);
             throw error;
         }
     }
 
     async getEntityById(entityId, collectionName) {
         try {
-            console.log(`Getting entity by ID: ${entityId} from collection: ${collectionName}`);
             const docRef = doc(this.db, collectionName, entityId);
             const docSnap = await getDoc(docRef);
             
@@ -436,14 +409,11 @@ export class FirebaseService {
                     firestoreId: docSnap.id,
                     ...docSnap.data()
                 };
-                console.log('Entity found:', entityData);
                 return entityData;
             } else {
-                console.log(`Entity not found: ${entityId} in ${collectionName}`);
                 return null;
             }
         } catch (error) {
-            console.error('Error getting entity by ID:', error);
             throw error;
         }
     }
@@ -459,64 +429,40 @@ export class FirebaseService {
                 ...doc.data()
             }));
         } catch (error) {
-            console.error('Error loading all events:', error);
             throw error;
         }
     }
 
     async mergeEntities(draggedEntityId, draggedEntityType, targetEntityId, targetEntityType, updatedTargetEntity, eventUpdates) {
         try {
-            console.log('Starting Firebase merge operation...');
-            console.log('Parameters:', {
-                draggedEntityId,
-                draggedEntityType,
-                targetEntityId,
-                targetEntityType,
-                eventUpdatesCount: eventUpdates.length
-            });
-            
             const batch = writeBatch(this.db);
             
             // 1. Update the target entity with new aliases
-            console.log('Adding target entity update to batch...');
             const targetDocRef = doc(this.db, targetEntityType, targetEntityId);
             const { id, firestoreId, ...targetEntityData } = updatedTargetEntity;
             batch.update(targetDocRef, targetEntityData);
-            console.log('Target entity update added to batch');
             
             // 2. Update all events
-            console.log(`Adding ${eventUpdates.length} event updates to batch...`);
             eventUpdates.forEach((event, index) => {
                 try {
                     // Use firestoreId for Firebase document reference, fallback to id
                     const eventId = event.firestoreId || event.id;
-                    console.log(`Updating event ${index + 1}: ${eventId}`);
                     const eventDocRef = doc(this.db, 'events', eventId);
                     const { id, firestoreId, ...eventData } = event;
                     batch.update(eventDocRef, eventData);
-                    console.log(`Event ${index + 1}/${eventUpdates.length} added to batch`);
                 } catch (eventError) {
-                    console.error(`Error adding event ${index + 1} to batch:`, event, eventError);
                     throw eventError;
                 }
             });
-            console.log('All event updates added to batch');
             
             // 3. Delete the dragged entity
-            console.log('Adding dragged entity deletion to batch...');
             const draggedDocRef = doc(this.db, draggedEntityType, draggedEntityId);
             batch.delete(draggedDocRef);
-            console.log('Dragged entity deletion added to batch');
             
             // Execute the batch
-            console.log('Committing batch...');
             await batch.commit();
             
-            console.log('Firebase merge operation completed successfully');
-            
         } catch (error) {
-            console.error('Error in Firebase merge operation:', error);
-            console.error('Error stack:', error.stack);
             throw error;
         }
     }

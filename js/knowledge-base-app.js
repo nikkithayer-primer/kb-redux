@@ -25,6 +25,10 @@ export class KnowledgeBaseApp {
         // Initialize UI
         this.initializeEventListeners();
         this.loadExistingData();
+        
+        // Make some methods globally accessible for debugging
+        window.clearWikidataCache = () => this.entityProcessor.clearWikidataCache();
+        window.debugEntityProcessor = () => console.log('EntityProcessor cache stats:', this.entityProcessor.getCacheStats());
     }
 
     initializeEventListeners() {
@@ -193,7 +197,7 @@ export class KnowledgeBaseApp {
             dateReceived: dateReceived,
             processedDatetime: processedDatetime,
             locations: row.Locations ? this.csvParser.parseLocations(row.Locations) : [],
-            sources: row.Source ? this.csvParser.parseSources(row.Source) : []
+            sources: (row.Sources || row.Source) ? this.csvParser.parseSources(row.Sources || row.Source) : []
         };
 
         // Check for duplicate events
@@ -606,7 +610,7 @@ export class KnowledgeBaseApp {
                 Sentence: document.getElementById('manualSentence').value.trim(),
                 'Date Received': document.getElementById('manualDateReceived').value,
                 Locations: document.getElementById('manualLocations').value.trim(),
-                Source: document.getElementById('manualSources').value.trim(),
+                Sources: document.getElementById('manualSources').value.trim(),
                 DateTime: document.getElementById('manualDateTime').value
             };
 

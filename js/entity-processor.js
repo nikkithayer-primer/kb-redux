@@ -28,12 +28,17 @@ export class EntityProcessor {
     }
 
     async processEntity(entityName, role, event) {
+        console.log(`DEBUG: Processing entity "${entityName}" with role "${role}"`);
+        
         // First check if entity exists in current session
         let entity = this.findExistingEntity(entityName);
         
         if (!entity) {
+            console.log(`DEBUG: Entity "${entityName}" not found in existing entities, creating new...`);
             // Always create new entity during ingest - deduplication happens separately
             entity = await this.createNewEntity(entityName, role);
+        } else {
+            console.log(`DEBUG: Found existing entity for "${entityName}":`, entity.name, entity.type);
         }
         
         // Add connection if it doesn't already exist
@@ -68,11 +73,14 @@ export class EntityProcessor {
             // Always create new entity during ingest - deduplication happens separately
             let wikidataInfo = null;
             
-            // Check Wikidata cache first
+            // Check Wikidata cache first, but don't use null cache hits for locations either
             const cachedLocationData = this.wikidataCache.get(locationName);
-            if (cachedLocationData !== undefined) { // Use undefined check to allow null cache hits
+            if (cachedLocationData !== undefined && cachedLocationData !== null) { // Only use successful cache hits
                 wikidataInfo = cachedLocationData;
             } else {
+                if (cachedLocationData === null) {
+                    console.log(`DEBUG: Found null cached result for location "${locationName}", retrying API call...`);
+                }
                 try {
                     // Add timeout wrapper for location Wikidata calls
                     wikidataInfo = await Promise.race([
@@ -95,17 +103,41 @@ export class EntityProcessor {
                 }
             }
             
+            // Extract Wikidata fields for location
+            const wikidataFields = this.extractWikidataFields(wikidataInfo);
+            
+            // Merge aliases properly for locations too
+            const mergedAliases = [locationName];
+            if (wikidataFields.aliases && Array.isArray(wikidataFields.aliases)) {
+                wikidataFields.aliases.forEach(alias => {
+                    if (!mergedAliases.includes(alias)) {
+                        mergedAliases.push(alias);
+                    }
+                });
+            }
+
             entity = {
                 id: `place_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                 name: locationName,
-                aliases: [locationName],
                 type: 'place',
                 category: this.classifyLocation(locationName, wikidataInfo),
                 wikidata_id: wikidataInfo?.id || null,
                 description: wikidataInfo?.description || '',
                 connections: [],
                 coordinates: wikidataInfo?.coordinates || null,
-                ...this.extractLocationFields(wikidataInfo)
+                // Always include these fields for places too
+                educated_at: [],
+                residences: [],
+                member_of: [],
+                languages_spoken: [],
+                employer: [],
+                occupation: [],
+                spouse: [],
+                children: [],
+                parents: [],
+                siblings: [],
+                ...wikidataFields,
+                aliases: mergedAliases // Put aliases last to ensure proper merging
             };
             
             this.processedEntities.places.push(entity);
@@ -139,11 +171,21 @@ export class EntityProcessor {
     async createNewEntity(entityName, role) {
         let wikidataInfo = null;
         
-        // Check Wikidata cache first
+        // Debug logging
+        console.log(`DEBUG: Creating entity "${entityName}" with role "${role}"`);
+        
+        // Check Wikidata cache first, but don't use null cache hits - retry failed calls
         const cachedWikidata = this.wikidataCache.get(entityName);
-        if (cachedWikidata !== undefined) { // Use undefined check to allow null cache hits
+        if (cachedWikidata !== undefined && cachedWikidata !== null) { // Only use successful cache hits
+            console.log(`DEBUG: Found cached Wikidata for "${entityName}":`, cachedWikidata);
             wikidataInfo = cachedWikidata;
         } else {
+            if (cachedWikidata === null) {
+                console.log(`DEBUG: Found null cached result for "${entityName}", retrying API call...`);
+            } else {
+                console.log(`DEBUG: No cache hit for "${entityName}", making Wikidata API call...`);
+            }
+            
             try {
                 // Add timeout wrapper for Wikidata calls
                 wikidataInfo = await Promise.race([
@@ -177,15 +219,40 @@ export class EntityProcessor {
         // Check memory usage periodically
         this.checkMemoryUsage();
         
+        // Extract Wikidata fields first
+        const wikidataFields = this.extractWikidataFields(wikidataInfo);
+        
+        // Merge aliases properly - combine entity name with Wikidata aliases
+        const mergedAliases = [entityName];
+        if (wikidataFields.aliases && Array.isArray(wikidataFields.aliases)) {
+            // Add Wikidata aliases that aren't already included
+            wikidataFields.aliases.forEach(alias => {
+                if (!mergedAliases.includes(alias)) {
+                    mergedAliases.push(alias);
+                }
+            });
+        }
+
         const entity = {
             id: `entity_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             name: entityName,
-            aliases: [entityName],
             type: this.determineEntityType(entityName, wikidataInfo, role),
             wikidata_id: wikidataInfo?.id || null,
             description: wikidataInfo?.description || '',
             connections: [],
-            ...this.extractWikidataFields(wikidataInfo)
+            // Always include these fields, even if empty, so they appear in Firebase
+            educated_at: [],
+            residences: [],
+            member_of: [],
+            languages_spoken: [],
+            employer: [],
+            occupation: [],
+            spouse: [],
+            children: [],
+            parents: [],
+            siblings: [],
+            ...wikidataFields, // This will override the empty arrays if Wikidata has data
+            aliases: mergedAliases // Put aliases last to ensure proper merging
         };
         
         // Add to appropriate collection
@@ -439,6 +506,12 @@ export class EntityProcessor {
         this.nameVariationCache.clear();
     }
 
+    // Clear just the Wikidata cache to force fresh API calls
+    clearWikidataCache() {
+        console.log('Clearing Wikidata cache to force fresh API calls...');
+        this.wikidataCache.clear();
+    }
+
     getCacheStats() {
         return {
             entityCacheSize: this.entityCache.size,
@@ -498,14 +571,20 @@ export class EntityProcessor {
     }
 
     determineEntityType(name, wikidataInfo, role = null) {
-        // Use role hint if available
+        // Strong role-based hints - actors and targets are often people
         if (role === 'actor' || role === 'target') {
-            if (this.isPerson(name, wikidataInfo)) return 'person';
+            // First check if it's clearly NOT a person
             if (this.isOrganization(name, wikidataInfo)) return 'organization';
             if (this.isPlace(name, wikidataInfo)) return 'place';
+            
+            // If it's not clearly an org or place, and it's an actor/target, lean towards person
+            if (this.isPerson(name, wikidataInfo)) return 'person';
+            
+            // For actors/targets that don't clearly match other categories, don't assume person
+            // Let it fall through to the default classification logic
         }
         
-        // Default logic
+        // Default logic for non-actor/target entities
         if (this.isPerson(name, wikidataInfo)) return 'person';
         if (this.isOrganization(name, wikidataInfo)) return 'organization';
         if (this.isPlace(name, wikidataInfo)) return 'place';
@@ -513,6 +592,7 @@ export class EntityProcessor {
     }
 
     isPerson(name, wikidataInfo) {
+        // First check Wikidata if available
         if (wikidataInfo?.instance_of) {
             const instance = wikidataInfo.instance_of.toLowerCase();
             if (instance.includes('human') || instance.includes('person')) {
@@ -520,13 +600,64 @@ export class EntityProcessor {
             }
         }
         
-        // Name patterns that suggest a person
+        // Enhanced name patterns that suggest a person
         const personPatterns = [
-            /^(Mr\.|Mrs\.|Ms\.|Dr\.|Prof\.)/, // Titles
+            /^(Mr\.|Mrs\.|Ms\.|Dr\.|Prof\.|President|Prime Minister|Minister|Secretary|Ambassador|Senator|Representative|Governor|Mayor)/, // Titles
             /\b(Jr\.|Sr\.|III|IV)\b/, // Suffixes
         ];
         
-        return personPatterns.some(pattern => pattern.test(name));
+        // Check for formal patterns first
+        if (personPatterns.some(pattern => pattern.test(name))) {
+            return true;
+        }
+        
+        // Improved heuristics for person names
+        const nameParts = name.trim().split(/\s+/);
+        
+        // Single word names are less likely to be people (unless they're known single names)
+        if (nameParts.length === 1) {
+            // Check for known single-name patterns or very short names that are likely organizations
+            if (name.length <= 3 || /^(LLC|Inc|Corp|Ltd|GmbH|SA|AG|PLC|Technology)$/i.test(name)) {
+                return false;
+            }
+            // Single names could be people (like "Madonna", "Cher") but are less common
+            return false;
+        }
+        
+        // Two or more words - check for explicit exclusions but don't assume person
+        if (nameParts.length >= 2) {
+            // Check if it looks like an organization
+            const orgKeywords = [
+                'corporation', 'company', 'inc', 'llc', 'ltd', 'corp', 'group', 'association', 
+                'foundation', 'institute', 'university', 'college', 'school', 'hospital',
+                'department', 'ministry', 'agency', 'bureau', 'office', 'commission',
+                'party', 'union', 'federation', 'council', 'committee', 'board',
+                'bank', 'financial', 'investment', 'capital', 'holdings', 'ventures',
+                'international', 'national', 'global', 'worldwide', 'systems', 'solutions',
+                'technologies', 'services', 'industries', 'enterprises', 'partners'
+            ];
+            
+            const nameLower = name.toLowerCase();
+            if (orgKeywords.some(keyword => nameLower.includes(keyword))) {
+                return false;
+            }
+            
+            // Check for place indicators
+            const placeKeywords = [
+                'city', 'town', 'village', 'county', 'state', 'province', 'region',
+                'country', 'republic', 'kingdom', 'district', 'territory', 'island',
+                'mountain', 'river', 'lake', 'ocean', 'sea', 'bay', 'valley', 'street',
+                'avenue', 'road', 'boulevard', 'square', 'plaza', 'center', 'centre'
+            ];
+            
+            if (placeKeywords.some(keyword => nameLower.includes(keyword))) {
+                return false;
+            }
+            
+            // Don't assume person just based on word count - require explicit indicators
+        }
+        
+        return false;
     }
 
     isOrganization(name, wikidataInfo) {
@@ -596,27 +727,47 @@ export class EntityProcessor {
         const fields = {};
         
         // Basic fields
-        if (wikidataInfo.occupation) fields.occupation = wikidataInfo.occupation;
+        if (wikidataInfo.occupation && wikidataInfo.occupation.length > 0) fields.occupation = wikidataInfo.occupation;
         if (wikidataInfo.dateOfBirth) fields.dateOfBirth = wikidataInfo.dateOfBirth;
         if (wikidataInfo.country) fields.country = wikidataInfo.country;
         if (wikidataInfo.founded) fields.founded = wikidataInfo.founded;
         if (wikidataInfo.instance_of) fields.instance_of = wikidataInfo.instance_of;
         
-        // Enhanced fields that were being fetched but not saved
-        if (wikidataInfo.aliases) fields.aliases = wikidataInfo.aliases;
-        if (wikidataInfo.educated_at) fields.educated_at = wikidataInfo.educated_at;
-        if (wikidataInfo.residences) fields.residences = wikidataInfo.residences;
-        if (wikidataInfo.member_of) fields.member_of = wikidataInfo.member_of;
-        if (wikidataInfo.languages_spoken) fields.languages_spoken = wikidataInfo.languages_spoken;
-        if (wikidataInfo.employer) fields.employer = wikidataInfo.employer;
+        // Enhanced fields that were being fetched but not saved - include even if empty to show in Firebase
+        if (wikidataInfo.hasOwnProperty('aliases')) {
+            fields.aliases = Array.isArray(wikidataInfo.aliases) ? wikidataInfo.aliases : [];
+        }
+        if (wikidataInfo.hasOwnProperty('educated_at')) {
+            fields.educated_at = Array.isArray(wikidataInfo.educated_at) ? wikidataInfo.educated_at : [];
+        }
+        if (wikidataInfo.hasOwnProperty('residences')) {
+            fields.residences = Array.isArray(wikidataInfo.residences) ? wikidataInfo.residences : [];
+        }
+        if (wikidataInfo.hasOwnProperty('member_of')) {
+            fields.member_of = Array.isArray(wikidataInfo.member_of) ? wikidataInfo.member_of : [];
+        }
+        if (wikidataInfo.hasOwnProperty('languages_spoken')) {
+            fields.languages_spoken = Array.isArray(wikidataInfo.languages_spoken) ? wikidataInfo.languages_spoken : [];
+        }
+        if (wikidataInfo.hasOwnProperty('employer')) {
+            fields.employer = Array.isArray(wikidataInfo.employer) ? wikidataInfo.employer : [];
+        }
         if (wikidataInfo.coordinates) fields.coordinates = wikidataInfo.coordinates;
         if (wikidataInfo.population) fields.population = wikidataInfo.population;
         
-        // Family relations
-        if (wikidataInfo.spouse) fields.spouse = wikidataInfo.spouse;
-        if (wikidataInfo.children) fields.children = wikidataInfo.children;
-        if (wikidataInfo.parents) fields.parents = wikidataInfo.parents;
-        if (wikidataInfo.siblings) fields.siblings = wikidataInfo.siblings;
+        // Family relations - include even if empty to show in Firebase
+        if (wikidataInfo.hasOwnProperty('spouse')) {
+            fields.spouse = Array.isArray(wikidataInfo.spouse) ? wikidataInfo.spouse : [];
+        }
+        if (wikidataInfo.hasOwnProperty('children')) {
+            fields.children = Array.isArray(wikidataInfo.children) ? wikidataInfo.children : [];
+        }
+        if (wikidataInfo.hasOwnProperty('parents')) {
+            fields.parents = Array.isArray(wikidataInfo.parents) ? wikidataInfo.parents : [];
+        }
+        if (wikidataInfo.hasOwnProperty('siblings')) {
+            fields.siblings = Array.isArray(wikidataInfo.siblings) ? wikidataInfo.siblings : [];
+        }
         
         return fields;
     }

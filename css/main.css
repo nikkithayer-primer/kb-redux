@@ -323,10 +323,6 @@ input[type="file"] {
     padding: var(--space-1) var(--space-2);
 }
 
-/* Utility Classes */
-.hidden {
-    display: none;
-}
 
 .loading {
     display: inline-block;
@@ -393,10 +389,10 @@ input[type="file"] {
 }
 
 .loading-content {
-    background: var(--background-color);
+    background: var(--gray-50, #f8fafc);
     padding: var(--space-6);
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow-lg);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
     text-align: center;
     min-width: 300px;
     max-width: 500px;
@@ -405,11 +401,15 @@ input[type="file"] {
 .loading-spinner {
     width: 40px;
     height: 40px;
-    border: 3px solid var(--border-color);
-    border-top: 3px solid var(--primary-color);
+    border: 3px solid var(--gray-300, #cbd5e1);
+    border-top: 3px solid var(--primary, #2563eb);
     border-radius: 50%;
     animation: spin 1s linear infinite;
     margin: 0 auto var(--space-4);
+}
+/* Utility Classes */
+.hidden {
+    display: none;
 }
 
 @keyframes spin {
@@ -418,8 +418,8 @@ input[type="file"] {
 }
 
 .loading-status {
-    font-size: var(--font-size-base);
-    color: var(--text-color);
+    font-size: var(--font-base, 0.9rem);
+    color: var(--gray-700, #334155);
     margin-bottom: var(--space-4);
     font-weight: 500;
 }
@@ -431,7 +431,7 @@ input[type="file"] {
 .progress-bar {
     width: 100%;
     height: 8px;
-    background: var(--border-color);
+    background: var(--gray-200, #e2e8f0);
     border-radius: 4px;
     overflow: hidden;
     margin-bottom: var(--space-2);
@@ -439,15 +439,15 @@ input[type="file"] {
 
 .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
+    background: linear-gradient(90deg, var(--primary, #2563eb), var(--primary-light, #3b82f6));
     border-radius: 4px;
     transition: width 0.3s ease;
     width: 0%;
 }
 
 .progress-text {
-    font-size: var(--font-size-sm);
-    color: var(--text-secondary);
+    font-size: var(--font-sm, 0.875rem);
+    color: var(--gray-500, #64748b);
     font-weight: 500;
 }
 
@@ -458,7 +458,7 @@ input[type="file"] {
 /* Enhanced status message styles */
 .status-message {
     padding: var(--space-4);
-    border-radius: var(--border-radius);
+    border-radius: var(--radius);
     margin: var(--space-4) 0;
     font-weight: 500;
     display: none;
@@ -491,7 +491,7 @@ input[type="file"] {
 
 .critical-error h3 {
     margin: 0 0 var(--space-2);
-    font-size: var(--font-size-lg);
+    font-size: var(--font-lg, 1rem);
 }
 
 .critical-error p {

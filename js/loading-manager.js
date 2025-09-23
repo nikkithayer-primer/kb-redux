@@ -9,6 +9,11 @@ export class LoadingManager {
         this.cancelCallbacks = new Map();
         
         this.initializeUI();
+        
+        // Set up periodic cleanup of stuck operations
+        setInterval(() => {
+            this.cleanupStuckOperations();
+        }, 30000); // Check every 30 seconds
     }
 
     initializeUI() {
@@ -99,7 +104,10 @@ export class LoadingManager {
             this.cancelCallbacks.delete(operationId);
         }
 
-        this.updateUI();
+        // Force update UI after a brief delay to ensure DOM is ready
+        setTimeout(() => {
+            this.updateUI();
+        }, 100);
     }
 
     // Cancel a specific operation
@@ -158,14 +166,24 @@ export class LoadingManager {
 
     // Update the UI based on current operations
     updateUI() {
-        const hasOperations = this.activeOperations.size > 0;
-        
-        if (!this.loadingOverlay) return;
+        try {
+            const hasOperations = this.activeOperations.size > 0;
+            
+            if (!this.loadingOverlay) {
+                // Try to reinitialize if overlay is missing
+                this.initializeUI();
+                if (!this.loadingOverlay) return;
+            }
 
-        if (hasOperations) {
-            this.showLoading();
-        } else {
-            this.hideLoading();
+            if (hasOperations) {
+                this.showLoading();
+            } else {
+                this.hideLoading();
+            }
+        } catch (error) {
+            console.warn('Error updating loading UI:', error);
+            // Force hide as fallback
+            this.forceHideLoading();
         }
     }
 
@@ -211,6 +229,21 @@ export class LoadingManager {
         if (this.loadingOverlay) {
             this.loadingOverlay.classList.add('hidden');
         }
+    }
+
+    // Force hide loading overlay (emergency method)
+    forceHideLoading() {
+        // Clear all active operations
+        this.activeOperations.clear();
+        this.cancelCallbacks.clear();
+        
+        // Force hide the overlay
+        if (this.loadingOverlay) {
+            this.loadingOverlay.classList.add('hidden');
+        }
+        
+        // Reset any error states
+        this.isShowingError = false;
     }
 
     // Utility method to wrap async operations with loading
@@ -287,7 +320,25 @@ export class LoadingManager {
     debug() {
         console.log('LoadingManager state:', this.getLoadingState());
     }
+
+    // Clean up stuck operations (operations running too long)
+    cleanupStuckOperations() {
+        const now = Date.now();
+        const maxOperationTime = 300000; // 5 minutes
+        
+        for (const [operationId, operation] of this.activeOperations.entries()) {
+            const operationAge = now - operation.startTime;
+            if (operationAge > maxOperationTime) {
+                console.warn(`Cleaning up stuck operation: ${operationId} (running for ${Math.round(operationAge/1000)}s)`);
+                this.completeOperation(operationId);
+            }
+        }
+    }
 }
 
 // Create global instance
 export const loadingManager = new LoadingManager();
+
+// Make some methods globally accessible for debugging
+window.forceHideLoading = () => loadingManager.forceHideLoading();
+window.debugLoading = () => loadingManager.debug();

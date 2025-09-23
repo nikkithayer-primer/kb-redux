@@ -9,10 +9,16 @@ export class WikidataService {
         // Clean the entity name before searching
         const cleanedName = this.cleanEntityName(entityName);
         
+        console.log(`DEBUG: WikidataService.searchWikidata called for "${entityName}" (cleaned: "${cleanedName}")`);
+        
         // Check cache first (using original name as key)
         if (this.cache.has(entityName)) {
-            return this.cache.get(entityName);
+            const cached = this.cache.get(entityName);
+            console.log(`DEBUG: WikidataService cache hit for "${entityName}":`, cached);
+            return cached;
         }
+        
+        console.log(`DEBUG: WikidataService making API call for "${entityName}"...`);
 
         try {
             // Single search query - no variations for speed
@@ -20,7 +26,7 @@ export class WikidataService {
             
             // Add timeout to prevent hanging
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000); // Further reduced to 3 second timeout
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout for main search
             
             try {
                 const response = await fetch(searchUrl, { signal: controller.signal });
@@ -35,7 +41,7 @@ export class WikidataService {
                     const detailUrl = `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${firstMatch.id}&format=json&origin=*`;
                     
                     const detailController = new AbortController();
-                    const detailTimeoutId = setTimeout(() => detailController.abort(), 3000);
+                    const detailTimeoutId = setTimeout(() => detailController.abort(), 8000); // 8 second timeout for entity details
                     
                     try {
                         const detailResponse = await fetch(detailUrl, { signal: detailController.signal });
@@ -235,22 +241,36 @@ export class WikidataService {
     async resolveWikidataProperty(claim) {
         try {
             const value = this.extractClaimValue(claim);
+            
+            // If it's a Wikidata entity reference (Q123456), try to resolve it
             if (value && typeof value === 'string' && value.match(/^Q\d+$/)) {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+                const timeoutId = setTimeout(() => controller.abort(), 6000); // 6 second timeout for property resolution
                 
                 try {
-                    const response = await fetch(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${value}&format=json&origin=*&props=labels`, { signal: controller.signal });
+                    const response = await fetch(
+                        `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${value}&format=json&origin=*&props=labels`, 
+                        { signal: controller.signal }
+                    );
                     clearTimeout(timeoutId);
-                    const data = await response.json();
-                    if (data.entities && data.entities[value] && data.entities[value].labels && data.entities[value].labels.en) {
-                        return data.entities[value].labels.en.value;
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.entities && data.entities[value] && data.entities[value].labels && data.entities[value].labels.en) {
+                            return data.entities[value].labels.en.value;
+                        }
                     }
+                    
+                    // If API call succeeded but no English label found, return the Q-ID as fallback
+                    return value;
                 } catch (fetchError) {
                     clearTimeout(timeoutId);
-                    console.warn('Error fetching Wikidata property:', fetchError);
+                    // Return the Q-ID as fallback if API call fails
+                    return value;
                 }
             }
+            
+            // Return the raw value if it's not a Q-ID or if it's already a resolved string
             return value;
         } catch (error) {
             console.warn('Error resolving Wikidata property:', error);
@@ -260,15 +280,30 @@ export class WikidataService {
 
     async resolveWikidataPropertyArray(claims) {
         try {
-            // Limit to first 10 items to avoid excessive API calls
-            const limitedClaims = claims.slice(0, 10);
-            const results = await Promise.all(
+            // Limit to first 5 items to reduce API calls and improve success rate
+            const limitedClaims = claims.slice(0, 5);
+            
+            // Use Promise.allSettled to handle individual failures gracefully
+            const results = await Promise.allSettled(
                 limitedClaims.map(claim => this.resolveWikidataProperty(claim))
             );
             
-            // Filter out null/undefined values and return unique values
-            const validResults = results.filter(result => result != null && result !== '');
-            return [...new Set(validResults)];
+            // Extract successful results and filter out null/undefined values
+            const validResults = results
+                .filter(result => result.status === 'fulfilled' && result.value != null && result.value !== '')
+                .map(result => result.value);
+                
+            const uniqueResults = [...new Set(validResults)];
+            
+            // If we got no results but had claims, try to extract raw values as fallback
+            if (uniqueResults.length === 0 && limitedClaims.length > 0) {
+                const fallbackResults = limitedClaims
+                    .map(claim => this.extractClaimValue(claim))
+                    .filter(value => value != null && value !== '');
+                return [...new Set(fallbackResults)];
+            }
+            
+            return uniqueResults;
         } catch (error) {
             console.warn('Error resolving Wikidata property array:', error);
             return [];
