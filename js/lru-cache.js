@@ -125,7 +125,6 @@ export class LRUCache {
         }
         
         if (oldestKey) {
-            console.log(`LRUCache: Evicting ${oldestKey} (access time: ${oldestAccessTime})`);
             this.delete(oldestKey);
         }
     }
@@ -139,10 +138,10 @@ export class LRUCache {
 
     // Debug method to see current cache contents
     debug() {
-        console.log('LRU Cache Debug:', {
+        return {
             size: this.cache.size,
             memory: this.getMemoryUsage(),
             keys: Array.from(this.cache.keys()).slice(0, 10) // Show first 10 keys
-        });
+        };
     }
 }

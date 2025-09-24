@@ -75,7 +75,6 @@ export class EntityProcessor {
                 wikidataInfo = cachedLocationData;
             } else {
                 if (cachedLocationData === null) {
-                    console.log(`DEBUG: Found null cached result for location "${locationName}", retrying API call...`);
                 }
                 try {
                     // Add timeout wrapper for location Wikidata calls
@@ -496,7 +495,6 @@ export class EntityProcessor {
 
     // Clear just the Wikidata cache to force fresh API calls
     clearWikidataCache() {
-        console.log('Clearing Wikidata cache to force fresh API calls...');
         this.wikidataCache.clear();
     }
 
@@ -784,7 +782,7 @@ export class EntityProcessor {
         const wikidataCacheStats = this.wikidataCache.getStats();
         const nameCacheStats = this.nameVariationCache.getStats();
         
-        console.log('EntityProcessor Cache Stats:', {
+        return {
             entityCache: entityCacheStats,
             wikidataCache: wikidataCacheStats,
             nameVariationCache: nameCacheStats,
@@ -793,7 +791,7 @@ export class EntityProcessor {
                 parseFloat(wikidataCacheStats.memory.mb) + 
                 parseFloat(nameCacheStats.memory.mb)
             ).toFixed(2)
-        });
+        };
         
         // Force cleanup if memory usage is high
         const totalMemoryPercentage = 
@@ -823,7 +821,6 @@ export class EntityProcessor {
             this.nameVariationCache.cleanup();
         }
         
-        console.log('EntityProcessor: Cache cleanup completed');
     }
 
     getMemoryStats() {

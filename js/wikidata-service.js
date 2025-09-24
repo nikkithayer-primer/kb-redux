@@ -9,16 +9,13 @@ export class WikidataService {
         // Clean the entity name before searching
         const cleanedName = this.cleanEntityName(entityName);
         
-        console.log(`DEBUG: WikidataService.searchWikidata called for "${entityName}" (cleaned: "${cleanedName}")`);
         
         // Check cache first (using original name as key)
         if (this.cache.has(entityName)) {
             const cached = this.cache.get(entityName);
-            console.log(`DEBUG: WikidataService cache hit for "${entityName}":`, cached);
             return cached;
         }
         
-        console.log(`DEBUG: WikidataService making API call for "${entityName}"...`);
 
         try {
             // Single search query - no variations for speed

@@ -318,7 +318,7 @@ export class LoadingManager {
 
     // Debug method
     debug() {
-        console.log('LoadingManager state:', this.getLoadingState());
+        return this.getLoadingState();
     }
 
     // Clean up stuck operations (operations running too long)

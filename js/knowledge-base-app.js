@@ -28,7 +28,7 @@ export class KnowledgeBaseApp {
         
         // Make some methods globally accessible for debugging
         window.clearWikidataCache = () => this.entityProcessor.clearWikidataCache();
-        window.debugEntityProcessor = () => console.log('EntityProcessor cache stats:', this.entityProcessor.getCacheStats());
+        window.debugEntityProcessor = () => this.entityProcessor.getCacheStats();
     }
 
     initializeEventListeners() {
@@ -187,10 +187,10 @@ export class KnowledgeBaseApp {
             return;
         }
 
-        // Process datetime
-        const processedDatetime = this.dateTimeProcessor.processDateTime(row.Datetimes, dateReceived);
+        // Process datetime with duration support
+        const datetimeInfo = this.dateTimeProcessor.processDateTimeWithDuration(row.Datetimes, dateReceived);
 
-        // Create event object
+        // Create event object with duration fields
         const event = {
             id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             actor: row.Actor,
@@ -198,7 +198,14 @@ export class KnowledgeBaseApp {
             target: row.Target || '', // Target is optional, default to empty string
             sentence: row.Sentence,
             dateReceived: dateReceived,
-            processedDatetime: processedDatetime,
+            // New duration-aware fields
+            startDate: datetimeInfo.startDate,
+            endDate: datetimeInfo.endDate,
+            duration: datetimeInfo.duration,
+            granularity: datetimeInfo.granularity,
+            originalDatetime: datetimeInfo.originalString,
+            // Legacy field for backward compatibility
+            processedDatetime: datetimeInfo.startDate,
             locations: row.Locations ? this.csvParser.parseLocations(row.Locations) : [],
             sources: (row.Sources || row.Source) ? this.csvParser.parseSources(row.Sources || row.Source) : []
         };
@@ -298,7 +305,6 @@ export class KnowledgeBaseApp {
             const events = this.entityProcessor.processedEntities.events;
             
             const result = await this.firebaseService.saveBatch(entities, events);
-            console.log(`Saved data in ${result.batchCount} batch(es)`);
 
         } catch (error) {
             console.error('Error saving to Firebase:', error);
@@ -614,7 +620,7 @@ export class KnowledgeBaseApp {
                 'Date Received': document.getElementById('manualDateReceived').value,
                 Locations: document.getElementById('manualLocations').value.trim(),
                 Sources: document.getElementById('manualSources').value.trim(),
-                DateTime: document.getElementById('manualDateTime').value
+                Datetimes: document.getElementById('manualDateTime').value
             };
 
             // Validate required fields
@@ -676,12 +682,6 @@ export class KnowledgeBaseApp {
                                : event.locations && event.locations.includes(draggedEntity.name));
                     
                     if (shouldUpdate) {
-                        console.log('Event to update:', {
-                            id: event.id,
-                            firestoreId: event.firestoreId,
-                            actor: event.actor,
-                            target: event.target
-                        });
                     }
                     
                     return shouldUpdate;
@@ -759,7 +759,6 @@ export class KnowledgeBaseApp {
 
     updateLocalDataAfterMerge(draggedEntity, targetEntity, updatedTargetEntity, eventUpdates) {
         try {
-            console.log('Updating local data after merge...');
             
             // Update the target entity in local storage
             const collections = ['people', 'organizations', 'places', 'unknown'];
@@ -774,14 +773,12 @@ export class KnowledgeBaseApp {
                     // Remove dragged entity
                     const draggedIndex = entities.findIndex(e => e.id === draggedEntity.id);
                     if (draggedIndex !== -1) {
-                        console.log(`Removing dragged entity from ${collection}:`, draggedEntity.name);
                         removedEntity = entities.splice(draggedIndex, 1)[0];
                     }
                     
                     // Update target entity
                     const targetIndex = entities.findIndex(e => e.id === targetEntity.id);
                     if (targetIndex !== -1) {
-                        console.log(`Updating target entity in ${collection}:`, targetEntity.name);
                         entities[targetIndex] = updatedTargetEntity;
                         updatedTargetIndex = targetIndex;
                         targetCollection = collection;
@@ -791,7 +788,6 @@ export class KnowledgeBaseApp {
 
             // Update events in local storage
             if (this.entityProcessor.processedEntities.events) {
-                console.log('Updating local events...');
                 eventUpdates.forEach(updatedEvent => {
                     const eventIndex = this.entityProcessor.processedEntities.events.findIndex(e => 
                         e.firestoreId === updatedEvent.firestoreId || e.id === updatedEvent.id
@@ -803,17 +799,14 @@ export class KnowledgeBaseApp {
             }
 
             // Recalculate connection counts for all entities
-            console.log('Recalculating connection counts...');
             this.recalculateConnectionCounts();
 
             // Skip full table refresh to preserve element references during merge
             // The table manager will handle the specific row updates
-            console.log('Skipping full table refresh to preserve element references...');
             
             // Update statistics
             this.updateStatistics();
             
-            console.log('Local data update completed');
             
         } catch (error) {
             console.error('Error updating local data after merge:', error);
@@ -863,7 +856,6 @@ export class KnowledgeBaseApp {
                 }
             });
             
-            console.log('Connection counts recalculated');
             
         } catch (error) {
             console.error('Error recalculating connection counts:', error);

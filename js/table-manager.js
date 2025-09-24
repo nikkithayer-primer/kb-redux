@@ -293,11 +293,6 @@ export class TableManager {
         row.addEventListener('drop', (e) => {
             e.preventDefault();
             if (this.draggedEntity && row.dataset.entityId !== this.draggedEntity.id) {
-                console.log('Drop event triggered:', {
-                    draggedEntity: this.draggedEntity.name,
-                    targetEntity: row.dataset.entityName,
-                    draggedElement: this.draggedEntity.element
-                });
                 
                 this.handleEntityMerge(this.draggedEntity, {
                     id: row.dataset.entityId,
@@ -339,30 +334,19 @@ export class TableManager {
 
             // Call the merge function from the main app
             if (window.app && window.app.mergeEntities) {
-                console.log('Starting merge process...');
                 await window.app.mergeEntities(draggedEntity, targetEntity);
-                console.log('Merge completed, removing element...');
                 
                 // Remove the dragged row from the table immediately
-                console.log('Removing dragged element:', {
-                    element: draggedEntity.element,
-                    parentNode: draggedEntity.element?.parentNode,
-                    entityId: draggedEntity.id,
-                    entityName: draggedEntity.name
-                });
                 
                 if (draggedEntity.element && draggedEntity.element.parentNode) {
                     draggedEntity.element.parentNode.removeChild(draggedEntity.element);
-                    console.log('Dragged element removed successfully');
                 } else {
                     // Try to find the element by data attribute as fallback
-                    console.log('Primary removal failed, trying fallback method...');
                     const tableBody = document.getElementById('entitiesTableBody');
                     if (tableBody) {
                         const elementToRemove = tableBody.querySelector(`tr[data-entity-id="${draggedEntity.id}"]`);
                         if (elementToRemove) {
                             elementToRemove.remove();
-                            console.log('Dragged element removed using fallback method');
                         } else {
                             console.error('Could not find dragged element to remove:', draggedEntity.id);
                         }
@@ -427,7 +411,6 @@ export class TableManager {
                     if (connectionCountCell) {
                         const newCount = updatedEntity.connectionCount || 0;
                         connectionCountCell.textContent = newCount;
-                        console.log(`Updated connection count for ${targetEntity.name}: ${newCount}`);
                     }
                 }
             }
@@ -438,7 +421,6 @@ export class TableManager {
 
     updateAllConnectionCounts() {
         try {
-            console.log('Updating connection counts for all visible rows...');
             const tableBody = document.getElementById('entitiesTableBody');
             if (!tableBody) return;
 
@@ -467,7 +449,6 @@ export class TableManager {
                     }
                 }
             });
-            console.log('Connection counts updated for all visible rows');
         } catch (error) {
             console.error('Error updating all connection counts:', error);
         }

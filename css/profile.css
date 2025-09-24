@@ -82,16 +82,52 @@
     margin: 0;
 }
 
+/* Entity Type Badge - Same as table view */
+.entity-type-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--font-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    border: 1px solid;
+    border-radius: var(--radius);
+}
+
+.entity-type-badge.person {
+    background: #fef2f2;
+    color: #991b1b;
+    border-color: #fecaca;
+}
+
+.entity-type-badge.organization {
+    background: #dbeafe;
+    color: #1e40af;
+    border-color: #bfdbfe;
+}
+
+.entity-type-badge.place {
+    background: #dcfce7;
+    color: #166534;
+    border-color: #bbf7d0;
+}
+
+.entity-type-badge.unknown {
+    background: var(--gray-100);
+    color: var(--gray-600);
+    border-color: var(--gray-300);
+}
+
+/* Legacy support - updated to match badge styling */
 .entity-type {
     display: inline-flex;
     align-items: center;
-    padding: var(--space-1) var(--space-3);
+    padding: var(--space-1) var(--space-2);
     font-size: var(--font-xs);
-    font-weight: 600;
+    font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    border-radius: 999px;
     border: 1px solid;
+    border-radius: var(--radius);
 }
 
 .entity-type.person {
@@ -694,6 +730,136 @@
     padding: var(--space-8) var(--space-4);
     color: var(--gray-400);
     font-size: var(--font-sm);
+}
+
+/* Hierarchical Timeline Styles */
+.timeline-group {
+    margin-bottom: var(--space-4);
+}
+
+.timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-3) var(--space-4);
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius);
+    margin-bottom: var(--space-2);
+    transition: all 0.2s ease;
+}
+
+.timeline-header:hover {
+    background: var(--gray-100);
+}
+
+.timeline-header.collapsed::after {
+    content: ' ▼';
+    color: var(--gray-400);
+}
+
+.timeline-header:not(.collapsed)::after {
+    content: ' ▲';
+    color: var(--gray-400);
+}
+
+/* Level-specific styling */
+.timeline-header-3 {
+    background: var(--primary);
+    color: white;
+    font-weight: 600;
+    font-size: var(--font-lg);
+}
+
+.timeline-header-3:hover {
+    background: var(--primary-dark);
+}
+
+.timeline-header-2 {
+    background: var(--primary-light);
+    color: var(--primary-dark);
+    font-weight: 500;
+    margin-left: var(--space-4);
+}
+
+.timeline-header-2:hover {
+    background: var(--primary-lighter);
+}
+
+.timeline-header-1 {
+    background: var(--gray-100);
+    color: var(--gray-700);
+    font-weight: 400;
+    margin-left: var(--space-8);
+    font-size: var(--font-sm);
+}
+
+.timeline-label {
+    font-weight: inherit;
+}
+
+.timeline-count {
+    font-size: var(--font-xs);
+    opacity: 0.8;
+    padding: var(--space-1) var(--space-2);
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius);
+}
+
+.timeline-events {
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.timeline-events.collapsed {
+    max-height: 0;
+    opacity: 0;
+    margin: 0;
+    padding: 0;
+}
+
+.timeline-events-3 {
+    margin-left: 0;
+}
+
+.timeline-events-2 {
+    margin-left: var(--space-4);
+}
+
+.timeline-events-1 {
+    margin-left: var(--space-8);
+}
+
+/* Event items within timeline levels */
+.event-level-3 {
+    border-left: 4px solid var(--primary);
+    background: rgba(37, 99, 235, 0.05);
+}
+
+.event-level-2 {
+    border-left: 3px solid var(--primary-light);
+    background: rgba(37, 99, 235, 0.03);
+}
+
+.event-level-1 {
+    border-left: 2px solid var(--gray-300);
+    background: white;
+}
+
+/* Adjust timeline dots for nested items */
+.event-level-3::before {
+    background: var(--primary);
+    left: calc(-1 * var(--space-6) - 2px);
+}
+
+.event-level-2::before {
+    background: var(--primary-light);
+    left: calc(-1 * var(--space-6) + 2px);
+}
+
+.event-level-1::before {
+    background: var(--gray-400);
+    left: calc(-1 * var(--space-6) + 6px);
 }
 
 /* Timeline responsive adjustments */

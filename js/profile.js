@@ -195,7 +195,6 @@ class EntityProfile {
             }
         }
         
-        console.log(`Loaded ${this.allEntities.length} related entities (vs loading entire database)`);
     }
 
     async loadRelatedEvents() {
@@ -205,7 +204,6 @@ class EntityProfile {
         // Check cache first
         if (this.eventsCache.has(entityName)) {
             this.allEvents = this.eventsCache.get(entityName);
-            console.log(`Loaded ${this.allEvents.length} related events from cache`);
             return;
         }
         
@@ -272,7 +270,6 @@ class EntityProfile {
         // Cache the results
         this.eventsCache.set(entityName, this.allEvents);
         
-        console.log(`Loaded ${this.allEvents.length} related events (vs loading entire database)`);
     }
     
     isEventRelatedToEntity(event, entityName) {
@@ -288,7 +285,13 @@ class EntityProfile {
         const entity = this.currentEntity;
         
         document.getElementById('entityName').textContent = entity.name;
-        document.getElementById('entityType').textContent = entity.type || entity.category || 'Entity';
+        
+        // Update entity type with badge styling
+        const entityTypeElement = document.getElementById('entityType');
+        const entityType = entity.type || entity.category || 'unknown';
+        entityTypeElement.textContent = entityType.charAt(0).toUpperCase() + entityType.slice(1);
+        entityTypeElement.className = `entity-type-badge ${entityType}`;
+        
         document.getElementById('entityDescription').textContent = entity.description || 'No description available';
         
         // Render comprehensive data grid
@@ -680,56 +683,227 @@ class EntityProfile {
             eventsList.innerHTML = '<div class="events-empty">No related events found</div>';
             return;
         }
+
+        // Group events by timeline hierarchy (year > month > day)
+        const timelineGroups = this.groupEventsByTimeline(relatedEvents);
         
-        // Sort events by date (most recent first)
-        const sortedEvents = relatedEvents.sort((a, b) => {
-            const dateA = this.parseEventDate(a.dateReceived);
-            const dateB = this.parseEventDate(b.dateReceived);
-            return dateB - dateA;
-        });
+        // Render hierarchical timeline
+        this.renderHierarchicalTimeline(timelineGroups, eventsList);
+    }
+
+    groupEventsByTimeline(events) {
+        const groups = new Map();
         
-        sortedEvents.slice(0, 15).forEach((event, index) => {
-            const eventItem = document.createElement('div');
-            eventItem.className = 'event-item';
+        events.forEach(event => {
+            // Use new duration fields if available, fall back to legacy
+            const startDate = event.startDate ? new Date(event.startDate) : this.parseEventDate(event.dateReceived);
+            const granularity = event.granularity || 'day';
+            const duration = event.duration || 'instant';
             
-            // Format the date properly
-            const eventDate = this.parseEventDate(event.dateReceived);
-            const dateString = eventDate ? this.formatTimelineDate(eventDate) : 'Unknown date';
+            if (!startDate || isNaN(startDate.getTime())) return;
             
-            // Determine the role of the current entity in this event
-            let role = 'location'; // default
-            if (event.actor.includes(this.currentEntity.name)) {
-                role = 'actor';
-            } else if (event.target && event.target.includes(this.currentEntity.name)) {
-                role = 'target';
-            } else if (Array.isArray(event.locations) 
-                ? event.locations.some(loc => (typeof loc === 'string' ? loc : loc.name) === this.currentEntity.name)
-                : event.locations && event.locations.includes(this.currentEntity.name)) {
-                role = 'location';
+            const year = startDate.getFullYear();
+            const month = startDate.getMonth();
+            const day = startDate.getDate();
+            
+            // Create hierarchical keys
+            const yearKey = year.toString();
+            const monthKey = `${year}-${month.toString().padStart(2, '0')}`;
+            const dayKey = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+            
+            // Initialize groups if they don't exist
+            if (!groups.has(yearKey)) {
+                groups.set(yearKey, {
+                    type: 'year',
+                    date: new Date(year, 0, 1),
+                    label: year.toString(),
+                    events: [],
+                    children: new Map()
+                });
             }
             
-            // Format location with icon
-            const locationText = Array.isArray(event.locations) 
-                ? event.locations.map(loc => typeof loc === 'string' ? loc : loc.name).filter(l => l).join(', ')
-                : event.locations || '';
+            const yearGroup = groups.get(yearKey);
             
-            // Format sources
-            const sourcesText = Array.isArray(event.sources) && event.sources.length > 0
-                ? event.sources.join(', ')
-                : '';
+            // For events with year granularity, add directly to year
+            if (granularity === 'year') {
+                yearGroup.events.push({ ...event, timelineLevel: 3 });
+                return;
+            }
             
-            eventItem.innerHTML = `
-                <div class="event-date">${dateString}</div>
-                <div class="event-sentence">${event.sentence || 'No description available'}</div>
-                <div class="event-meta">
-                    <span class="event-action ${role}">${role}</span>
-                    ${locationText ? `<span class="event-location">${locationText}</span>` : ''}
-                    ${sourcesText ? `<span class="event-sources">Sources: ${sourcesText}</span>` : ''}
-                </div>
-            `;
+            // Month level
+            if (!yearGroup.children.has(monthKey)) {
+                yearGroup.children.set(monthKey, {
+                    type: 'month',
+                    date: new Date(year, month, 1),
+                    label: new Date(year, month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+                    events: [],
+                    children: new Map()
+                });
+            }
             
-            eventsList.appendChild(eventItem);
+            const monthGroup = yearGroup.children.get(monthKey);
+            
+            // For events with month granularity, add to month
+            if (granularity === 'month' || granularity === 'quarter') {
+                monthGroup.events.push({ ...event, timelineLevel: 2 });
+                return;
+            }
+            
+            // Day level
+            if (!monthGroup.children.has(dayKey)) {
+                monthGroup.children.set(dayKey, {
+                    type: 'day',
+                    date: new Date(year, month, day),
+                    label: new Date(year, month, day).toLocaleDateString(),
+                    events: [],
+                    children: new Map()
+                });
+            }
+            
+            const dayGroup = monthGroup.children.get(dayKey);
+            dayGroup.events.push({ ...event, timelineLevel: 1 });
         });
+        
+        return groups;
+    }
+
+    renderHierarchicalTimeline(groups, container) {
+        // Sort years in descending order (most recent first)
+        const sortedYears = Array.from(groups.entries()).sort((a, b) => b[1].date - a[1].date);
+        
+        sortedYears.forEach(([yearKey, yearGroup]) => {
+            const yearElement = this.createTimelineGroup(yearGroup, 3);
+            container.appendChild(yearElement);
+            
+            // Sort months in descending order
+            const sortedMonths = Array.from(yearGroup.children.entries()).sort((a, b) => b[1].date - a[1].date);
+            
+            sortedMonths.forEach(([monthKey, monthGroup]) => {
+                const monthElement = this.createTimelineGroup(monthGroup, 2);
+                yearElement.appendChild(monthElement);
+                
+                // Sort days in descending order
+                const sortedDays = Array.from(monthGroup.children.entries()).sort((a, b) => b[1].date - a[1].date);
+                
+                sortedDays.forEach(([dayKey, dayGroup]) => {
+                    const dayElement = this.createTimelineGroup(dayGroup, 1);
+                    monthElement.appendChild(dayElement);
+                });
+            });
+        });
+    }
+
+    createTimelineGroup(group, level) {
+        const groupElement = document.createElement('div');
+        groupElement.className = `timeline-group timeline-level-${level}`;
+        
+        // Create header
+        const headerElement = document.createElement('div');
+        headerElement.className = `timeline-header timeline-header-${level}`;
+        headerElement.innerHTML = `
+            <span class="timeline-label">${group.label}</span>
+            <span class="timeline-count">${this.getTotalEventCount(group)} events</span>
+        `;
+        groupElement.appendChild(headerElement);
+        
+        // Create events container
+        const eventsContainer = document.createElement('div');
+        eventsContainer.className = `timeline-events timeline-events-${level}`;
+        
+        // Add events for this group
+        group.events.forEach(event => {
+            const eventElement = this.createEventItem(event);
+            eventsContainer.appendChild(eventElement);
+        });
+        
+        groupElement.appendChild(eventsContainer);
+        
+        // Make collapsible for higher levels
+        if (level > 1) {
+            headerElement.style.cursor = 'pointer';
+            headerElement.addEventListener('click', () => {
+                eventsContainer.classList.toggle('collapsed');
+                headerElement.classList.toggle('collapsed');
+            });
+        }
+        
+        return groupElement;
+    }
+
+    getTotalEventCount(group) {
+        let count = group.events.length;
+        group.children.forEach(child => {
+            count += this.getTotalEventCount(child);
+        });
+        return count;
+    }
+
+    createEventItem(event) {
+        const eventItem = document.createElement('div');
+        eventItem.className = `event-item event-level-${event.timelineLevel || 1}`;
+        
+        // Format duration if available
+        const durationInfo = this.formatEventDuration(event);
+        
+        // Determine the role of the current entity in this event
+        let role = 'location'; // default
+        if (event.actor && event.actor.includes(this.currentEntity.name)) {
+            role = 'actor';
+        } else if (event.target && event.target.includes(this.currentEntity.name)) {
+            role = 'target';
+        } else if (Array.isArray(event.locations) 
+            ? event.locations.some(loc => (typeof loc === 'string' ? loc : loc.name) === this.currentEntity.name)
+            : event.locations && event.locations.includes(this.currentEntity.name)) {
+            role = 'location';
+        }
+        
+        // Format location with icon
+        const locationText = Array.isArray(event.locations) 
+            ? event.locations.map(loc => typeof loc === 'string' ? loc : loc.name).filter(l => l).join(', ')
+            : event.locations || '';
+        
+        // Format sources
+        const sourcesText = Array.isArray(event.sources) && event.sources.length > 0
+            ? event.sources.join(', ')
+            : '';
+        
+        eventItem.innerHTML = `
+            <div class="event-date">${durationInfo}</div>
+            <div class="event-sentence">${event.sentence || 'No description available'}</div>
+            <div class="event-meta">
+                <span class="event-action ${role}">${role}</span>
+                ${locationText ? `<span class="event-location">${locationText}</span>` : ''}
+                ${sourcesText ? `<span class="event-sources">Sources: ${sourcesText}</span>` : ''}
+            </div>
+        `;
+
+        return eventItem;
+    }
+
+    formatEventDuration(event) {
+        // Use new duration fields if available
+        if (event.startDate && event.granularity) {
+            const startDate = new Date(event.startDate);
+            const granularity = event.granularity;
+            
+            switch (granularity) {
+                case 'year':
+                    return startDate.getFullYear().toString();
+                case 'quarter':
+                    const quarter = Math.floor(startDate.getMonth() / 3) + 1;
+                    return `Q${quarter} ${startDate.getFullYear()}`;
+                case 'month':
+                    return startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                case 'day':
+                    return startDate.toLocaleDateString();
+                default:
+                    return this.formatTimelineDate(startDate);
+            }
+        }
+        
+        // Fall back to legacy formatting
+        const eventDate = this.parseEventDate(event.dateReceived);
+        return eventDate ? this.formatTimelineDate(eventDate) : 'Unknown date';
     }
 
     initializeNetworkGraph() {
@@ -922,7 +1096,6 @@ class EntityProfile {
             .style('cursor', 'pointer')
             .style('pointer-events', 'all') // Ensure mouse events work
             .on('click', (event, d) => {
-                console.log('Node clicked:', d.name); // Debug log
                 event.preventDefault();
                 event.stopPropagation();
                 event.stopImmediatePropagation();
@@ -962,7 +1135,6 @@ class EntityProfile {
             .style('pointer-events', 'all') // Ensure mouse events work
             .style('user-select', 'none') // Prevent text selection
             .on('click', (event, d) => {
-                console.log('Label clicked:', d.name); // Debug log
                 event.preventDefault();
                 event.stopPropagation();
                 event.stopImmediatePropagation();
@@ -1233,13 +1405,14 @@ class EntityProfile {
     }
 
     getNodeColor(type) {
+        // Use colors that match the entity type badges for consistency
         const colors = {
-            person: '#e74c3c',
-            organization: '#3498db',
-            place: '#27ae60',
-            unknown: '#95a5a6'
+            person: '#991b1b',      // Matches .entity-type-badge.person color
+            organization: '#1e40af', // Matches .entity-type-badge.organization color
+            place: '#166534',       // Matches .entity-type-badge.place color
+            unknown: '#6b7280'      // Matches .entity-type-badge.unknown color (gray-500)
         };
-        return colors[type] || '#95a5a6';
+        return colors[type] || '#6b7280';
     }
 
     initializeMap() {
@@ -1511,7 +1684,6 @@ class EntityProfile {
             const wikidataCleared = this.currentEntity.wikidata_id && !newWikidataId;
             
             if (wikidataCleared) {
-                console.log('Wikidata ID cleared, removing Wikidata-derived fields...');
                 
                 // Remove wikidata_id
                 updatedEntity.wikidata_id = null;
@@ -1546,7 +1718,6 @@ class EntityProfile {
                 
                 // If entity has Wikidata ID, re-fetch Wikidata info for the new type
                 if (updatedEntity.wikidata_id) {
-                    console.log(`Entity type changed from ${originalType} to ${newType}, re-fetching Wikidata info...`);
                     try {
                         const wikidataInfo = await this.fetchAndParseWikidataInfo(updatedEntity.wikidata_id);
                         if (wikidataInfo) {
@@ -1555,7 +1726,6 @@ class EntityProfile {
                             
                             // Merge new Wikidata fields into the entity
                             updatedEntity = { ...updatedEntity, ...newWikidataFields };
-                            console.log(`Updated entity with new Wikidata fields for type ${newType}`);
                         }
                     } catch (error) {
                         console.warn('Failed to re-fetch Wikidata info for type change:', error);
@@ -1811,7 +1981,6 @@ class EntityProfile {
         document.getElementById('searchResults').innerHTML = '';
         document.getElementById('wikidataSearch').value = '';
         
-        console.log('Wikidata ID cleared - fields will be removed on save');
     }
 
     // Get list of all Wikidata-derived fields that should be cleared
@@ -1891,14 +2060,8 @@ class EntityProfile {
             if (data.entities && data.entities[wikidataId]) {
                 const entity = data.entities[wikidataId];
                 
-                // Update form fields with Wikidata information
-                if (entity.labels?.en?.value) {
-                    document.getElementById('editName').value = entity.labels.en.value;
-                }
-                
-                if (entity.descriptions?.en?.value) {
-                    document.getElementById('editDescription').value = entity.descriptions.en.value;
-                }
+                // Note: Form fields are simplified - only type and wikidata_id are editable
+                // The Wikidata information will be applied when the entity is saved and type changes are processed
                 
                 // Extract additional information based on claims
                 await this.populateFieldsFromWikidata(entity);
@@ -1909,59 +2072,10 @@ class EntityProfile {
     }
 
     async populateFieldsFromWikidata(wikidataEntity) {
-        if (!wikidataEntity.claims) return;
-        
-        const entityType = document.getElementById('editType').value;
-        
-        if (entityType === 'person') {
-            // Date of birth (P569)
-            if (wikidataEntity.claims.P569 && document.getElementById('editDateOfBirth')) {
-                const dob = wikidataEntity.claims.P569[0]?.mainsnak?.datavalue?.value?.time;
-                if (dob) {
-                    const date = new Date(dob.replace(/^\+/, ''));
-                    document.getElementById('editDateOfBirth').value = date.toISOString().split('T')[0];
-                }
-            }
-            
-            // Occupation (P106)
-            if (wikidataEntity.claims.P106 && document.getElementById('editOccupation')) {
-                const occupationValue = await this.resolveWikidataProperty(wikidataEntity.claims.P106[0]);
-                if (occupationValue) {
-                    document.getElementById('editOccupation').value = occupationValue;
-                }
-            }
-        }
-        
-        if (entityType === 'place') {
-            // Coordinates (P625)
-            if (wikidataEntity.claims.P625) {
-                const coords = wikidataEntity.claims.P625[0]?.mainsnak?.datavalue?.value;
-                if (coords) {
-                    if (document.getElementById('editLatitude')) {
-                        document.getElementById('editLatitude').value = coords.latitude;
-                    }
-                    if (document.getElementById('editLongitude')) {
-                        document.getElementById('editLongitude').value = coords.longitude;
-                    }
-                }
-            }
-            
-            // Population (P1082)
-            if (wikidataEntity.claims.P1082 && document.getElementById('editPopulation')) {
-                const population = wikidataEntity.claims.P1082[0]?.mainsnak?.datavalue?.value?.amount;
-                if (population) {
-                    document.getElementById('editPopulation').value = parseInt(population.replace('+', ''));
-                }
-            }
-            
-            // Country (P17)
-            if (wikidataEntity.claims.P17 && document.getElementById('editCountry')) {
-                const countryValue = await this.resolveWikidataProperty(wikidataEntity.claims.P17[0]);
-                if (countryValue) {
-                    document.getElementById('editCountry').value = countryValue;
-                }
-            }
-        }
+        // This method is no longer needed since the edit form is simplified
+        // to only show type and wikidata_id fields. Wikidata information
+        // is automatically applied when the entity is saved and processed.
+        // Wikidata information is automatically applied when the entity is saved and processed
     }
 
     async resolveWikidataProperty(claim) {

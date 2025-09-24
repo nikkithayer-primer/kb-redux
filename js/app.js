@@ -6,7 +6,6 @@ import { KnowledgeBaseApp } from './knowledge-base-app.js';
 document.addEventListener('DOMContentLoaded', () => {
     try {
         window.app = new KnowledgeBaseApp();
-        console.log('Knowledge Base App initialized successfully');
     } catch (error) {
         console.error('Failed to initialize Knowledge Base App:', error);
         
