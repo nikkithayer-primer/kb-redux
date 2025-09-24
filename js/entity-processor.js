@@ -28,17 +28,13 @@ export class EntityProcessor {
     }
 
     async processEntity(entityName, role, event) {
-        console.log(`DEBUG: Processing entity "${entityName}" with role "${role}"`);
         
         // First check if entity exists in current session
         let entity = this.findExistingEntity(entityName);
         
         if (!entity) {
-            console.log(`DEBUG: Entity "${entityName}" not found in existing entities, creating new...`);
             // Always create new entity during ingest - deduplication happens separately
             entity = await this.createNewEntity(entityName, role);
-        } else {
-            console.log(`DEBUG: Found existing entity for "${entityName}":`, entity.name, entity.type);
         }
         
         // Add connection if it doesn't already exist
@@ -171,20 +167,12 @@ export class EntityProcessor {
     async createNewEntity(entityName, role) {
         let wikidataInfo = null;
         
-        // Debug logging
-        console.log(`DEBUG: Creating entity "${entityName}" with role "${role}"`);
         
         // Check Wikidata cache first, but don't use null cache hits - retry failed calls
         const cachedWikidata = this.wikidataCache.get(entityName);
         if (cachedWikidata !== undefined && cachedWikidata !== null) { // Only use successful cache hits
-            console.log(`DEBUG: Found cached Wikidata for "${entityName}":`, cachedWikidata);
             wikidataInfo = cachedWikidata;
         } else {
-            if (cachedWikidata === null) {
-                console.log(`DEBUG: Found null cached result for "${entityName}", retrying API call...`);
-            } else {
-                console.log(`DEBUG: No cache hit for "${entityName}", making Wikidata API call...`);
-            }
             
             try {
                 // Add timeout wrapper for Wikidata calls
@@ -633,8 +621,8 @@ export class EntityProcessor {
                 'department', 'ministry', 'agency', 'bureau', 'office', 'commission',
                 'party', 'union', 'federation', 'council', 'committee', 'board',
                 'bank', 'financial', 'investment', 'capital', 'holdings', 'ventures',
-                'international', 'national', 'global', 'worldwide', 'systems', 'solutions',
-                'technologies', 'services', 'industries', 'enterprises', 'partners'
+                'international', 'national', 'government', 'global', 'worldwide', 'systems', 'solutions',
+                'technologies', 'semiconductor', 'services', 'industries', 'enterprises', 'partners'
             ];
             
             const nameLower = name.toLowerCase();
@@ -669,7 +657,7 @@ export class EntityProcessor {
             }
         }
         
-        const orgKeywords = ['corp', 'inc', 'llc', 'ltd', 'company', 'corporation', 'institute', 'university', 'college'];
+        const orgKeywords = ['corp', 'inc', 'llc', 'ltd', 'company', 'corporation', 'institute', 'university', 'business', 'college'];
         const nameLower = name.toLowerCase();
         return orgKeywords.some(keyword => nameLower.includes(keyword));
     }

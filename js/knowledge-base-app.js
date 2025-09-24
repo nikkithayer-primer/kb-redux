@@ -42,6 +42,9 @@ export class KnowledgeBaseApp {
         // Export knowledge base button
         document.getElementById('exportKnowledgeBaseBtn').addEventListener('click', () => this.exportKnowledgeBase());
         
+        // Wipe database button
+        document.getElementById('wipeDatabaseBtn').addEventListener('click', () => this.wipeDatabaseWithConfirmation());
+        
         // Manual entry modal
         document.getElementById('manualEntryBtn').addEventListener('click', () => this.showManualEntryModal());
         document.getElementById('closeManualEntryModal').addEventListener('click', () => this.hideManualEntryModal());
@@ -653,10 +656,7 @@ export class KnowledgeBaseApp {
 
     async mergeEntities(draggedEntity, targetEntity) {
         try {
-            console.log(`Merging ${draggedEntity.name} into ${targetEntity.name}`);
-
             // 1. Load both entities from Firebase to get complete data
-            console.log('Step 1: Loading entity data...');
             const draggedEntityData = await this.firebaseService.getEntityById(draggedEntity.id, draggedEntity.type);
             const targetEntityData = await this.firebaseService.getEntityById(targetEntity.id, targetEntity.type);
 
@@ -664,12 +664,8 @@ export class KnowledgeBaseApp {
                 throw new Error(`Could not load entity data for merge. Dragged: ${!!draggedEntityData}, Target: ${!!targetEntityData}`);
             }
 
-            console.log('Step 1 completed: Entity data loaded');
-
             // 2. Find all events that reference the dragged entity
-            console.log('Step 2: Loading all events...');
             const allEvents = await this.firebaseService.loadAllEvents();
-            console.log(`Loaded ${allEvents.length} total events`);
             
             const eventsToUpdate = allEvents.filter(event => {
                 try {
@@ -695,10 +691,7 @@ export class KnowledgeBaseApp {
                 }
             });
 
-            console.log(`Step 2 completed: Found ${eventsToUpdate.length} events to update`);
-
             // 3. Update events to reference the target entity instead
-            console.log('Step 3: Updating event references...');
             const eventUpdates = eventsToUpdate.map(event => {
                 try {
                     const updatedEvent = { ...event };
@@ -734,10 +727,7 @@ export class KnowledgeBaseApp {
                 }
             });
 
-            console.log('Step 3 completed: Event references updated');
-
             // 4. Add dragged entity name as alias to target entity
-            console.log('Step 4: Updating target entity aliases...');
             const updatedTargetEntity = { ...targetEntityData };
             if (!updatedTargetEntity.aliases) {
                 updatedTargetEntity.aliases = [];
@@ -745,10 +735,8 @@ export class KnowledgeBaseApp {
             if (!updatedTargetEntity.aliases.includes(draggedEntity.name)) {
                 updatedTargetEntity.aliases.push(draggedEntity.name);
             }
-            console.log('Step 4 completed: Aliases updated');
 
             // 5. Perform the merge in Firebase
-            console.log('Step 5: Performing Firebase merge...');
             await this.firebaseService.mergeEntities(
                 draggedEntity.id,
                 draggedEntity.type,
@@ -757,14 +745,10 @@ export class KnowledgeBaseApp {
                 updatedTargetEntity,
                 eventUpdates
             );
-            console.log('Step 5 completed: Firebase merge successful');
 
             // 6. Update local data and refresh UI
-            console.log('Step 6: Updating local data and refreshing UI...');
             this.updateLocalDataAfterMerge(draggedEntity, targetEntity, updatedTargetEntity, eventUpdates);
-            console.log('Step 6 completed: Local data updated and UI refreshed');
 
-            console.log('Entity merge completed successfully');
 
         } catch (error) {
             console.error('Error in mergeEntities:', error);
@@ -899,6 +883,68 @@ export class KnowledgeBaseApp {
                     return; // Found and updated, no need to check other collections
                 }
             }
+        }
+    }
+
+    async wipeDatabaseWithConfirmation() {
+        // Show confirmation dialog
+        const confirmMessage = `⚠️ WARNING: This will permanently delete ALL data from the database.
+
+This action will remove:
+• All people, organizations, places, and unknown entities
+• All events and connections
+• All imported CSV data
+• All manually entered data
+
+This action CANNOT be undone.
+
+Are you absolutely sure you want to continue?`;
+
+        if (!confirm(confirmMessage)) {
+            return; // User cancelled
+        }
+
+        // Second confirmation for extra safety
+        const secondConfirmation = prompt(
+            'To confirm deletion, please type "DELETE ALL DATA" (case sensitive):'
+        );
+
+        if (secondConfirmation !== 'DELETE ALL DATA') {
+            this.showStatus('Database wipe cancelled - confirmation text did not match.', 'info');
+            return;
+        }
+
+        try {
+            this.showStatus('Wiping database... This may take a moment.', 'info');
+            
+            // Use loading manager for this operation
+            loadingManager.startOperation('wipe_database', {
+                message: 'Wiping all database collections...',
+                timeout: 60000 // 60 second timeout
+            });
+
+            await this.firebaseService.wipeAllCollections();
+            
+            // Clear local data
+            this.entityProcessor.processedEntities = {
+                people: [],
+                organizations: [],
+                places: [],
+                unknown: [],
+                events: []
+            };
+
+            // Clear UI
+            this.tableManager.updateAllEntities(this.entityProcessor.processedEntities);
+            this.updateStatistics();
+            
+            loadingManager.completeOperation('wipe_database');
+            this.showStatus('✅ Database successfully wiped. All data has been permanently deleted.', 'success');
+            
+        } catch (error) {
+            console.error('Error wiping database:', error);
+            loadingManager.completeOperation('wipe_database');
+            this.showStatus(`❌ Error wiping database: ${error.message}`, 'error');
         }
     }
 }

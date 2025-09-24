@@ -194,6 +194,17 @@ input[type="file"] {
     background: var(--gray-50);
 }
 
+.btn-destructive {
+    border-color: #dc2626 !important;
+    color: #dc2626 !important;
+}
+
+.btn-destructive:hover {
+    background: #fef2f2 !important;
+    border-color: #b91c1c !important;
+    color: #b91c1c !important;
+}
+
 .btn-warning {
     background: var(--warning);
     color: white;
@@ -201,6 +212,17 @@ input[type="file"] {
 
 .btn-warning:hover {
     background: #d97706;
+}
+
+.btn-danger {
+    background: #dc2626;
+    color: white;
+    border-color: #dc2626;
+}
+
+.btn-danger:hover {
+    background: #b91c1c;
+    border-color: #b91c1c;
 }
 
 /* Progress Bar */
@@ -366,6 +388,48 @@ input[type="file"] {
     font-weight: 500;
     color: var(--gray-700);
     margin-bottom: var(--space-1);
+}
+
+/* Input with clear button */
+.input-with-clear {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-with-clear .form-input {
+    padding-right: 2.5rem;
+}
+
+.clear-btn {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    color: var(--gray-400, #9ca3af);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: var(--radius, 0.375rem);
+    transition: all 0.15s;
+    line-height: 1;
+    width: 1.5rem;
+    height: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+.clear-btn:hover {
+    background: var(--gray-100, #f3f4f6);
+    color: var(--gray-600, #4b5563);
+}
+
+.clear-btn:active {
+    background: var(--gray-200, #e5e7eb);
 }
 
 .form-group {

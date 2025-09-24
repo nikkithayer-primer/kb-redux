@@ -1,7 +1,7 @@
 // Firebase database operations
 
 import { db } from './config.js';
-import { collection, addDoc, updateDoc, doc, getDocs, getDoc, query, where, writeBatch, limit, startAfter, orderBy } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { collection, addDoc, updateDoc, doc, getDocs, getDoc, query, where, writeBatch, limit, startAfter, orderBy, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 export class FirebaseService {
     constructor() {
@@ -461,6 +461,45 @@ export class FirebaseService {
             
             // Execute the batch
             await batch.commit();
+            
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async wipeAllCollections() {
+        try {
+            const collections = ['people', 'organizations', 'places', 'unknown', 'events'];
+            
+            for (const collectionName of collections) {
+                await this.wipeCollection(collectionName);
+            }
+            
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async wipeCollection(collectionName) {
+        try {
+            const collectionRef = collection(this.db, collectionName);
+            const batchSize = 500; // Firestore batch limit
+            
+            let query = getDocs(collectionRef);
+            let snapshot = await query;
+            
+            while (!snapshot.empty) {
+                const batch = writeBatch(this.db);
+                
+                snapshot.docs.forEach((doc) => {
+                    batch.delete(doc.ref);
+                });
+                
+                await batch.commit();
+                
+                // Get next batch
+                snapshot = await getDocs(collectionRef);
+            }
             
         } catch (error) {
             throw error;

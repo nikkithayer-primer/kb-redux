@@ -85,16 +85,6 @@
             
             <form id="entityForm">
                 <div class="form-group">
-                    <label class="form-label" for="editName">Name</label>
-                    <input type="text" class="form-input" id="editName" required>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label" for="editAliases">Aliases (comma-separated)</label>
-                    <input type="text" class="form-input" id="editAliases">
-                </div>
-                
-                <div class="form-group">
                     <label class="form-label" for="editType">Type</label>
                     <select class="form-select" id="editType">
                         <option value="person">Person</option>
@@ -104,22 +94,16 @@
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label" for="editDescription">Description</label>
-                    <textarea class="form-textarea" id="editDescription"></textarea>
-                </div>
-                
-                <div class="form-group">
                     <label class="form-label" for="editWikidataId">Wikidata ID</label>
-                    <input type="text" class="form-input" id="editWikidataId" placeholder="Q123456">
+                    <div class="input-with-clear">
+                        <input type="text" class="form-input" id="editWikidataId" placeholder="Q123456">
+                        <button type="button" class="clear-btn" id="clearWikidataId" title="Clear Wikidata ID">&times;</button>
+                    </div>
                     
                     <div class="wikidata-search">
                         <input type="text" class="form-input" id="wikidataSearch" placeholder="Search Wikidata...">
                         <div class="search-results" id="searchResults"></div>
                     </div>
-                </div>
-                
-                <div id="additionalFields">
-                    <!-- Additional fields based on entity type will be added here -->
                 </div>
                 
                 <div class="form-actions">

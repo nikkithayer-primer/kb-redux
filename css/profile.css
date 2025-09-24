@@ -800,20 +800,17 @@
     max-height: 220px;
     overflow-y: auto;
     box-shadow: var(--shadow);
-}
-
-.search-result-item {
     padding: var(--space-2) var(--space-3);
     cursor: pointer;
     border-bottom: 1px solid var(--gray-100);
     transition: background-color 0.15s;
 }
 
-.search-result-item:hover {
+.search-results:hover {
     background: var(--gray-50);
 }
 
-.search-result-item:last-child {
+.search-results:last-child {
     border-bottom: none;
 }
 

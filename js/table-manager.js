@@ -19,6 +19,9 @@ export class TableManager {
         // Search control
         document.getElementById('entitySearch').addEventListener('input', () => this.filterEntities());
         
+        // Clear search button
+        document.getElementById('clearEntitySearch').addEventListener('click', () => this.clearSearch());
+        
         // Table sorting
         document.addEventListener('click', (e) => {
             if (e.target.closest('.sortable')) {
@@ -483,5 +486,13 @@ export class TableManager {
                 message.parentNode.removeChild(message);
             }
         }, 3000);
+    }
+
+    clearSearch() {
+        // Clear the search input
+        document.getElementById('entitySearch').value = '';
+        
+        // Trigger filtering to show all entities again
+        this.filterEntities();
     }
 }

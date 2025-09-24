@@ -76,12 +76,14 @@ class EntityProfile {
         safeAddEventListener('wikidataSearch', 'input', (e) => this.searchWikidata(e.target.value));
         safeAddEventListener('editWikidataId', 'input', (e) => this.validateWikidataId(e.target.value));
         
+        // Clear Wikidata ID button
+        safeAddEventListener('clearWikidataId', 'click', () => this.clearWikidataId());
         
         // Other actions
         safeAddEventListener('exportBtn', 'click', () => this.exportEntityData());
         
-        // Entity type change handler
-        safeAddEventListener('editType', 'change', (e) => this.updateAdditionalFields(e.target.value));
+        // Entity type change handler (no additional fields to update anymore)
+        // safeAddEventListener('editType', 'change', (e) => this.updateAdditionalFields(e.target.value));
     }
 
     async loadEntityData() {
@@ -396,8 +398,6 @@ class EntityProfile {
         };
 
         // Core identification fields
-        if (entity.id) fields.push({ label: 'Entity ID', value: entity.id });
-        if (entity.firestoreId) fields.push({ label: 'Database ID', value: entity.firestoreId });
         if (entity.wikidata_id) {
             fields.push({ 
                 label: 'Wikidata ID', 
@@ -460,9 +460,7 @@ class EntityProfile {
         if (entity.coordinates) fields.push({ label: 'Coordinates', value: formatValue(entity.coordinates) });
         
         // Connection and activity information
-        if (entity.connections && entity.connections.length > 0) {
-            fields.push({ label: 'Total Connections', value: entity.connections.length });
-        }
+        // (Total connections count moved to Connections section header)
         
         // Timestamps and metadata
         if (entity.created) fields.push({ label: 'Created', value: new Date(entity.created).toLocaleString() });
@@ -501,8 +499,26 @@ class EntityProfile {
         // Store all connections for filtering
         this.allConnections = this.processConnectionsData();
         
+        // Update connections section header with count
+        this.updateConnectionsHeader();
+        
         // Render with default filter (all)
         this.renderFilteredConnections('all');
+    }
+
+    updateConnectionsHeader() {
+        // Find the connections section specifically by looking for the section that contains connectionsList
+        const connectionsList = document.getElementById('connectionsList');
+        if (connectionsList) {
+            const connectionsSection = connectionsList.closest('.content-section');
+            if (connectionsSection) {
+                const connectionsTitle = connectionsSection.querySelector('h2.section-title');
+                if (connectionsTitle) {
+                    const totalConnections = this.allConnections ? this.allConnections.length : 0;
+                    connectionsTitle.textContent = `Connections (${totalConnections})`;
+                }
+            }
+        }
     }
 
     initializeConnectionFilters() {
@@ -1407,29 +1423,26 @@ class EntityProfile {
     }
 
     resetEditForm() {
-        // Reset form fields
-        document.getElementById('editName').value = '';
-        document.getElementById('editAliases').value = '';
-        document.getElementById('editDescription').value = '';
-        document.getElementById('editWikidataId').value = '';
-        document.getElementById('wikidataSearch').value = '';
-        document.getElementById('searchResults').innerHTML = '';
+        // Reset form fields (only the fields that exist in the simplified form)
+        const editTypeEl = document.getElementById('editType');
+        if (editTypeEl) editTypeEl.value = 'person';
         
-        // Clear additional fields
-        const additionalFields = document.getElementById('additionalFields');
-        additionalFields.innerHTML = '';
+        const editWikidataIdEl = document.getElementById('editWikidataId');
+        if (editWikidataIdEl) editWikidataIdEl.value = '';
+        
+        const wikidataSearchEl = document.getElementById('wikidataSearch');
+        if (wikidataSearchEl) wikidataSearchEl.value = '';
+        
+        const searchResultsEl = document.getElementById('searchResults');
+        if (searchResultsEl) searchResultsEl.innerHTML = '';
     }
 
     populateEditForm() {
         const entity = this.currentEntity;
         
-        document.getElementById('editName').value = entity.name || '';
-        document.getElementById('editAliases').value = entity.aliases ? entity.aliases.join(', ') : '';
+        // Only populate the fields that are still editable
         document.getElementById('editType').value = entity.type || 'person';
-        document.getElementById('editDescription').value = entity.description || '';
         document.getElementById('editWikidataId').value = entity.wikidata_id || '';
-        
-        this.updateAdditionalFields(entity.type || 'person');
     }
 
     updateAdditionalFields(entityType) {
@@ -1488,39 +1501,40 @@ class EntityProfile {
         event.preventDefault();
         
         try {
-            const formData = new FormData(event.target);
-            const updatedEntity = { ...this.currentEntity };
+            let updatedEntity = { ...this.currentEntity };
             
-            // Update basic fields
-            updatedEntity.name = document.getElementById('editName').value;
-            updatedEntity.aliases = document.getElementById('editAliases').value.split(',').map(a => a.trim()).filter(a => a);
+            // Update only the editable fields
             updatedEntity.type = document.getElementById('editType').value;
-            updatedEntity.description = document.getElementById('editDescription').value;
-            updatedEntity.wikidata_id = document.getElementById('editWikidataId').value;
+            const newWikidataId = document.getElementById('editWikidataId').value.trim();
             
-            // Update additional fields
-            const additionalFields = this.getAdditionalFieldsForType(updatedEntity.type);
-            additionalFields.forEach(field => {
-                const value = document.getElementById(field.id).value;
-                if (value) {
-                    if (field.type === 'number') {
-                        updatedEntity[field.property] = parseInt(value);
+            // Check if Wikidata ID was cleared
+            const wikidataCleared = this.currentEntity.wikidata_id && !newWikidataId;
+            
+            if (wikidataCleared) {
+                console.log('Wikidata ID cleared, removing Wikidata-derived fields...');
+                
+                // Remove wikidata_id
+                updatedEntity.wikidata_id = null;
+                
+                // Clear all Wikidata-derived fields
+                const wikidataFields = this.getWikidataFields();
+                wikidataFields.forEach(field => {
+                    if (Array.isArray(updatedEntity[field])) {
+                        updatedEntity[field] = [];
                     } else {
-                        updatedEntity[field.property] = value;
+                        delete updatedEntity[field];
                     }
-                }
-            });
-            
-            // Handle coordinates for places
-            if (updatedEntity.type === 'place') {
-                const lat = document.getElementById('editLatitude')?.value;
-                const lng = document.getElementById('editLongitude')?.value;
-                if (lat && lng) {
-                    updatedEntity.coordinates = {
-                        lat: parseFloat(lat),
-                        lng: parseFloat(lng)
-                    };
-                }
+                });
+                
+                // Reset aliases to just the entity name
+                updatedEntity.aliases = [updatedEntity.name];
+                
+                // Clear description if it came from Wikidata
+                updatedEntity.description = '';
+                
+            } else {
+                // Set the new Wikidata ID (could be same, new, or empty)
+                updatedEntity.wikidata_id = newWikidataId || null;
             }
             
             // Check if entity type has changed
@@ -1529,6 +1543,24 @@ class EntityProfile {
             const typeChanged = originalType !== newType;
             
             if (typeChanged) {
+                
+                // If entity has Wikidata ID, re-fetch Wikidata info for the new type
+                if (updatedEntity.wikidata_id) {
+                    console.log(`Entity type changed from ${originalType} to ${newType}, re-fetching Wikidata info...`);
+                    try {
+                        const wikidataInfo = await this.fetchAndParseWikidataInfo(updatedEntity.wikidata_id);
+                        if (wikidataInfo) {
+                            // Extract fields appropriate for the new entity type
+                            const newWikidataFields = this.extractWikidataFieldsForType(wikidataInfo, newType);
+                            
+                            // Merge new Wikidata fields into the entity
+                            updatedEntity = { ...updatedEntity, ...newWikidataFields };
+                            console.log(`Updated entity with new Wikidata fields for type ${newType}`);
+                        }
+                    } catch (error) {
+                        console.warn('Failed to re-fetch Wikidata info for type change:', error);
+                    }
+                }
                 
                 // Delete from old collection
                 const oldEntityRef = doc(db, this.entityType, this.currentEntity.firestoreId);
@@ -1605,6 +1637,212 @@ class EntityProfile {
             default:
                 return 'unknown'; // fallback to unknown for unrecognized types
         }
+    }
+
+    // Fetch and parse Wikidata information for an entity
+    async fetchAndParseWikidataInfo(wikidataId) {
+        try {
+            const response = await fetch(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${wikidataId}&format=json&origin=*`);
+            const data = await response.json();
+            
+            if (data.entities && data.entities[wikidataId]) {
+                const entity = data.entities[wikidataId];
+                return await this.parseWikidataEntityForUpdate(entity);
+            }
+        } catch (error) {
+            console.error('Error fetching Wikidata entity for type change:', error);
+        }
+        return null;
+    }
+
+    // Parse Wikidata entity data for updating existing entities
+    async parseWikidataEntityForUpdate(entity) {
+        const parsedData = {
+            id: entity.id,
+            description: entity.descriptions?.en?.value || '',
+            aliases: entity.aliases?.en?.map(alias => alias.value) || []
+        };
+
+        // Parse claims for various properties
+        if (entity.claims) {
+            // Instance of (P31)
+            if (entity.claims.P31) {
+                parsedData.instance_of = await this.resolveWikidataPropertyArray(entity.claims.P31);
+            }
+
+            // Occupation (P106) - for people
+            if (entity.claims.P106) {
+                parsedData.occupation = await this.resolveWikidataPropertyArray(entity.claims.P106);
+            }
+
+            // Date of birth (P569) - for people
+            if (entity.claims.P569) {
+                const birthClaim = entity.claims.P569[0];
+                if (birthClaim?.mainsnak?.datavalue?.value?.time) {
+                    parsedData.dateOfBirth = birthClaim.mainsnak.datavalue.value.time;
+                }
+            }
+
+            // Country (P17)
+            if (entity.claims.P17) {
+                parsedData.country = await this.resolveWikidataPropertyArray(entity.claims.P17);
+            }
+
+            // Population (P1082) - for places
+            if (entity.claims.P1082) {
+                const popClaim = entity.claims.P1082[0];
+                if (popClaim?.mainsnak?.datavalue?.value?.amount) {
+                    parsedData.population = parseInt(popClaim.mainsnak.datavalue.value.amount);
+                }
+            }
+
+            // Coordinates (P625) - for places
+            if (entity.claims.P625) {
+                const coordClaim = entity.claims.P625[0];
+                if (coordClaim?.mainsnak?.datavalue?.value) {
+                    const coord = coordClaim.mainsnak.datavalue.value;
+                    parsedData.coordinates = {
+                        lat: coord.latitude,
+                        lng: coord.longitude
+                    };
+                }
+            }
+
+            // Additional array properties
+            const arrayProperties = {
+                P69: 'educated_at',      // educated at
+                P551: 'residences',      // residence
+                P463: 'member_of',       // member of
+                P1412: 'languages_spoken', // languages spoken
+                P108: 'employer',        // employer
+                P26: 'spouse',           // spouse
+                P40: 'children',         // child
+                P22: 'parents',          // father
+                P25: 'parents',          // mother
+                P3373: 'siblings'        // sibling
+            };
+
+            for (const [prop, field] of Object.entries(arrayProperties)) {
+                if (entity.claims[prop]) {
+                    if (!parsedData[field]) parsedData[field] = [];
+                    const resolved = await this.resolveWikidataPropertyArray(entity.claims[prop]);
+                    if (field === 'parents' && parsedData.parents) {
+                        parsedData.parents = [...parsedData.parents, ...resolved];
+                    } else {
+                        parsedData[field] = resolved;
+                    }
+                }
+            }
+        }
+
+        return parsedData;
+    }
+
+    // Resolve Wikidata property array (simplified version)
+    async resolveWikidataPropertyArray(claims) {
+        const results = [];
+        const maxClaims = Math.min(claims.length, 5); // Limit to 5 claims
+
+        for (let i = 0; i < maxClaims; i++) {
+            const claim = claims[i];
+            if (claim?.mainsnak?.datavalue?.value?.id) {
+                const qId = claim.mainsnak.datavalue.value.id;
+                try {
+                    const response = await fetch(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${qId}&format=json&origin=*`);
+                    const data = await response.json();
+                    const label = data.entities?.[qId]?.labels?.en?.value || qId;
+                    results.push(label);
+                } catch (error) {
+                    results.push(qId); // Fallback to Q-ID
+                }
+            }
+        }
+
+        return results;
+    }
+
+    // Extract Wikidata fields appropriate for the entity type
+    extractWikidataFieldsForType(wikidataInfo, entityType) {
+        const fields = {};
+        
+        // Common fields for all types
+        if (wikidataInfo.description) fields.description = wikidataInfo.description;
+        if (wikidataInfo.aliases && Array.isArray(wikidataInfo.aliases)) {
+            fields.aliases = wikidataInfo.aliases;
+        }
+        
+        // Type-specific fields
+        if (entityType === 'person') {
+            // Person-specific fields
+            if (wikidataInfo.occupation) fields.occupation = wikidataInfo.occupation;
+            if (wikidataInfo.dateOfBirth) fields.dateOfBirth = wikidataInfo.dateOfBirth;
+            if (wikidataInfo.educated_at) fields.educated_at = wikidataInfo.educated_at;
+            if (wikidataInfo.residences) fields.residences = wikidataInfo.residences;
+            if (wikidataInfo.member_of) fields.member_of = wikidataInfo.member_of;
+            if (wikidataInfo.languages_spoken) fields.languages_spoken = wikidataInfo.languages_spoken;
+            if (wikidataInfo.employer) fields.employer = wikidataInfo.employer;
+            if (wikidataInfo.spouse) fields.spouse = wikidataInfo.spouse;
+            if (wikidataInfo.children) fields.children = wikidataInfo.children;
+            if (wikidataInfo.parents) fields.parents = wikidataInfo.parents;
+            if (wikidataInfo.siblings) fields.siblings = wikidataInfo.siblings;
+        } else if (entityType === 'organization') {
+            // Organization-specific fields
+            if (wikidataInfo.founded) fields.founded = wikidataInfo.founded;
+            if (wikidataInfo.country) fields.country = wikidataInfo.country;
+            if (wikidataInfo.member_of) fields.member_of = wikidataInfo.member_of;
+            if (wikidataInfo.instance_of) fields.instance_of = wikidataInfo.instance_of;
+        } else if (entityType === 'place') {
+            // Place-specific fields
+            if (wikidataInfo.country) fields.country = wikidataInfo.country;
+            if (wikidataInfo.population) fields.population = wikidataInfo.population;
+            if (wikidataInfo.coordinates) fields.coordinates = wikidataInfo.coordinates;
+            if (wikidataInfo.instance_of) fields.instance_of = wikidataInfo.instance_of;
+        }
+        
+        return fields;
+    }
+
+    // Clear Wikidata ID and all Wikidata-derived fields
+    clearWikidataId() {
+        // Clear the input field
+        document.getElementById('editWikidataId').value = '';
+        
+        // Clear the search results
+        document.getElementById('searchResults').innerHTML = '';
+        document.getElementById('wikidataSearch').value = '';
+        
+        console.log('Wikidata ID cleared - fields will be removed on save');
+    }
+
+    // Get list of all Wikidata-derived fields that should be cleared
+    getWikidataFields() {
+        return [
+            // Common fields
+            'description',
+            'aliases',
+            
+            // Person fields
+            'occupation',
+            'dateOfBirth',
+            'educated_at',
+            'residences',
+            'member_of',
+            'languages_spoken',
+            'employer',
+            'spouse',
+            'children',
+            'parents',
+            'siblings',
+            
+            // Organization fields
+            'founded',
+            'country',
+            'instance_of',
+            
+            // Place fields
+            'population',
+            'coordinates'
+        ];
     }
 
     async searchWikidata(searchTerm) {
