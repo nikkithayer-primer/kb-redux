@@ -292,7 +292,8 @@ class EntityProfile {
         entityTypeElement.textContent = entityType.charAt(0).toUpperCase() + entityType.slice(1);
         entityTypeElement.className = `entity-type-badge ${entityType}`;
         
-        document.getElementById('entityDescription').textContent = entity.description || 'No description available';
+        const description = entity.description || 'No description available';
+        document.getElementById('entityDescription').textContent = description;
         
         // Render comprehensive data grid
         const metaContainer = document.getElementById('entityMeta');
@@ -802,7 +803,9 @@ class EntityProfile {
         headerElement.className = `timeline-header timeline-header-${level}`;
         headerElement.innerHTML = `
             <span class="timeline-label">${group.label}</span>
-            <span class="timeline-count">${this.getTotalEventCount(group)} events</span>
+            <div class="timeline-right">
+                <span class="timeline-count">${this.getTotalEventCount(group)} events</span>
+            </div>
         `;
         groupElement.appendChild(headerElement);
         
@@ -2219,7 +2222,9 @@ class EntityProfile {
         // Organization indicators
         if (instanceLower.includes('organization') || instanceLower.includes('company') || 
             instanceLower.includes('corporation') || instanceLower.includes('institution') ||
-            instanceLower.includes('university') || instanceLower.includes('government')) {
+            instanceLower.includes('university') || instanceLower.includes('government') ||
+            instanceLower.includes('business') || instanceLower.includes('enterprise') ||
+            instanceLower.includes('firm') || instanceLower.includes('agency')) {
             return 'organization';
         }
         

@@ -650,7 +650,9 @@ export class EntityProcessor {
         if (wikidataInfo?.instance_of) {
             const instance = wikidataInfo.instance_of.toLowerCase();
             if (instance.includes('organization') || instance.includes('company') || 
-                instance.includes('corporation') || instance.includes('institution')) {
+                instance.includes('corporation') || instance.includes('institution') ||
+                instance.includes('business') || instance.includes('enterprise') ||
+                instance.includes('firm') || instance.includes('agency')) {
                 return true;
             }
         }

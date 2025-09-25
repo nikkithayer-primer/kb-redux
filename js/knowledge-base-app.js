@@ -439,10 +439,29 @@ export class KnowledgeBaseApp {
         this.profileManager.loadSpecificEntity(entityId, entityType);
     }
 
-    showMainView() {
+    async showMainView() {
         // Hide profile view, show main view
         document.getElementById('profileView').classList.add('hidden');
         document.getElementById('mainView').classList.remove('hidden');
+        
+        // Lightweight refresh: just reload from Firebase and update the table
+        console.log('Refreshing table data after returning from profile view...');
+        try {
+            const existingData = await this.firebaseService.loadExistingData();
+            if (existingData) {
+                // Update entity processor with fresh data
+                this.entityProcessor.processedEntities = existingData;
+                
+                // Update table and statistics
+                this.renderEntities();
+                
+                console.log('Table data refreshed successfully');
+                this.showStatus('Data refreshed', 'success');
+            }
+        } catch (error) {
+            console.error('Error refreshing table data:', error);
+            this.showStatus('Failed to refresh data', 'error');
+        }
     }
 
     async runDeduplication() {
